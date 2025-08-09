@@ -29,7 +29,7 @@ public class DeliveryNode : MonoBehaviour
         lastTime = Time.time;
 
         var rb = courier.GetComponent<Rigidbody2D>();
-        float speed = rb ? rb.linearVelocity.magnitude : 0f;
+        float speed = rb ? rb.velocity.magnitude : 0f;
         float dist = Vector2.Distance(transform.position, courier.transform.position);
         float normalized = Mathf.Clamp01(dist / radius);
 
