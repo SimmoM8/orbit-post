@@ -30,6 +30,9 @@ public class RunManager : MonoBehaviour
         bool speedOk = speed >= 6f && speed <= 12f;
         bool closeOk = normalizedDistance <= 0.35f;
         if (speedOk && closeOk && courier != null) courier.AddFuel(1);
+
+        courier?.AddFuel(courier.maxFuel); // full refuel after each delivery
+        chain = 0; // reset chain after scoring (or you can keep chain if you prefer)
     }
 
     public void ResetChain() => chain = 0;

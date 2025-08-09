@@ -746,8 +746,8 @@ CircleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
-  m_Radius: 1.4
+  m_Offset: {x: -0.00071104086, y: -0.0015411207}
+  m_Radius: 0.1
 --- !u!4 &687924613
 Transform:
   m_ObjectHideFlags: 0
@@ -1022,8 +1022,8 @@ CircleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
-  m_Radius: 1.6
+  m_Offset: {x: -0.000018589199, y: 0}
+  m_Radius: 0.11
 --- !u!4 &1088854108
 Transform:
   m_ObjectHideFlags: 0
@@ -1162,8 +1162,8 @@ CircleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
-  m_Radius: 1.2
+  m_Offset: {x: 0, y: 0.00009184082}
+  m_Radius: 0.1
 --- !u!4 &1152670466
 Transform:
   m_ObjectHideFlags: 0
@@ -1405,7 +1405,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   launchImpulse: 9
-  maxFuel: 5
+  maxFuel: 50
   aimMaxLength: 3.5
   predictionDt: 0.033
   predictionSteps: 30
@@ -1581,7 +1581,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 2100000, guid: 4459fff084dd84526ab8fd5082d2eacb, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1599,10 +1599,10 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
+  m_SortingLayerID: 328150785
+  m_SortingLayer: 3
   m_SortingOrder: 0
-  m_Sprite: {fileID: 10915, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
   m_Color: {r: 0.9529412, g: 0.7647059, b: 0.3019608, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -1727,7 +1727,7 @@ CircleCollider2D:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1213077082}
-  m_Enabled: 0
+  m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
   m_Material: {fileID: 0}
@@ -1754,8 +1754,8 @@ CircleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 6.5, y: 1.5}
-  m_Radius: 0.3
+  m_Offset: {x: 0.0058960915, y: 0}
+  m_Radius: 0.11579752
 --- !u!1 &1364415065
 GameObject:
   m_ObjectHideFlags: 0
@@ -1964,7 +1964,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   basePoints: 100
-  radius: 0.9
+  radius: 0.3
 --- !u!58 &1699776505
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -1999,8 +1999,8 @@ CircleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
-  m_Radius: 0.9
+  m_Offset: {x: 0.0011527041, y: -0.001013875}
+  m_Radius: 0.10344232
 --- !u!4 &1699776506
 Transform:
   m_ObjectHideFlags: 0
@@ -2011,7 +2011,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 6.5, y: 2.5, z: 0}
-  m_LocalScale: {x: 1.8, y: 1.8, z: 1.8}
+  m_LocalScale: {x: 0.6, y: 0.6, z: 0.6}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}

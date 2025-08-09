@@ -12,8 +12,7 @@ public class DeliveryNode : MonoBehaviour
     void OnValidate()
     {
         var col = GetComponent<CircleCollider2D>();
-        if (col) { col.isTrigger = true; col.radius = radius; }
-        transform.localScale = Vector3.one * (radius * 2f);
+        if (col) col.isTrigger = true; // don't force radius
     }
 
     void OnTriggerEnter2D(Collider2D other) => TryDeliver(other);
@@ -29,7 +28,7 @@ public class DeliveryNode : MonoBehaviour
         lastTime = Time.time;
 
         var rb = courier.GetComponent<Rigidbody2D>();
-        float speed = rb ? rb.velocity.magnitude : 0f;
+        float speed = rb ? rb.linearVelocity.magnitude : 0f;
         float dist = Vector2.Distance(transform.position, courier.transform.position);
         float normalized = Mathf.Clamp01(dist / radius);
 

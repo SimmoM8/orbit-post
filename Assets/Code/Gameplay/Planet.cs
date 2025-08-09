@@ -10,19 +10,18 @@ public class Planet : MonoBehaviour
     public Vector3 WorldPos => transform.position;
     public float MinRadiusSqr => minRadiusClamp * minRadiusClamp;
 
-    void OnEnable()  { GravityField.Planets.Add(this); }
+    void OnEnable() { GravityField.Planets.Add(this); }
     void OnDisable() { GravityField.Planets.Remove(this); }
 
     void OnValidate()
     {
         var col = GetComponent<CircleCollider2D>();
-        if (col) { col.radius = radius; col.isTrigger = false; }
-        transform.localScale = Vector3.one * (radius * 2f); // for simple circle sprites
+        if (col && col.isTrigger == false) { /* keep manual radius */ }
     }
 
     void OnDrawGizmos()
     {
-        Gizmos.color = new Color(1f,1f,1f,0.15f);
+        Gizmos.color = new Color(1f, 1f, 1f, 0.15f);
         Gizmos.DrawWireSphere(transform.position, radius);
     }
 }
