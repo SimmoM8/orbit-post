@@ -15,6 +15,8 @@ public class CourierController : MonoBehaviour
     Camera cam;
     int fuel;
     bool aiming;
+    public int Fuel => fuel;
+    public void AddFuel(int amount) { fuel = Mathf.Clamp(fuel + amount, 0, maxFuel); }
 
     void Awake()
     {
