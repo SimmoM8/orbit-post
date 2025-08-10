@@ -12,10 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfc70ae3082074adbb778e675b591c77, type: 3}
   m_Name: Heavy
   m_EditorClassIdentifier: 
-  typeName: Standard
-  packageColor: {r: 1, g: 1, b: 1, a: 1}
-  weightMultiplier: 1
-  isFragile: 0
-  fragileImpactThreshold: 5
-  perishTime: 0
-  baseScore: 100
+  materialName: Ore
+  materialColor: {r: 1, g: 1, b: 1, a: 1}
+  materialValue: 100
+  demandWeight: 1

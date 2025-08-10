@@ -16,6 +16,18 @@ public class DeliveryNode : MonoBehaviour
 
     [Header("Delivery Effects")] public float refuelFraction = 0.25f; // 25% tank on delivery
 
+    [Header("Post Progression")]
+    public int level = 1;
+    public int progress = 0;
+    public int requestGoal = 3;                  // deliveries needed to level up
+    public float influenceRadius = 7f;           // planets within this get a boost
+    public float productionBoostPerLevel = 0.25f; // +25% per level to nearby planets
+    public float nodeDemandBiasPerLevel = 0.10f;  // +10% per level when choosing next request
+
+    [Header("Post UI")]
+    public Vector3 levelLabelOffset = new Vector3(0f, 1.55f, 0f);
+    TextMeshPro levelTMP;
+
     [Header("Material Requests")]
     public PackageType requestedMaterial;
     public PackageType[] availableMaterials; // assign in Inspector
@@ -40,6 +52,18 @@ public class DeliveryNode : MonoBehaviour
         }
         if (requestedMaterial)
             SetRequest(requestedMaterial);
+
+        if (!levelTMP)
+        {
+            var goL = new GameObject("LevelTMP");
+            goL.transform.SetParent(transform, false);
+            goL.transform.localPosition = levelLabelOffset;
+            levelTMP = goL.AddComponent<TextMeshPro>();
+            levelTMP.fontSize = 2.8f;
+            levelTMP.alignment = TextAlignmentOptions.Center;
+            levelTMP.sortingOrder = 901;
+        }
+        RefreshLevelUI();
     }
 
     void OnValidate()
@@ -61,6 +85,11 @@ public class DeliveryNode : MonoBehaviour
             requestTMP.text = label;
             if (mat) requestTMP.color = mat.materialColor;
         }
+    }
+
+    void RefreshLevelUI()
+    {
+        if (levelTMP) levelTMP.text = $"L{level}";
     }
 
     void OnTriggerEnter2D(Collider2D other) => TryDeliver(other);
@@ -127,6 +156,17 @@ public class DeliveryNode : MonoBehaviour
 
         StartCoroutine(ScorePopup(sb.ToString(), (Vector3)transform.position + Vector3.up * 0.2f));
 
+        // Post progression: advance progress and level up if goal reached
+        progress++;
+        if (progress >= requestGoal)
+        {
+            progress = 0;
+            level++;
+            requestGoal = Mathf.CeilToInt(requestGoal * 1.5f); // ramp the requirement
+            RefreshLevelUI();
+            StartCoroutine(ScorePopup($"POST LEVEL UP! L{level}", (Vector3)transform.position + Vector3.up * 0.6f));
+        }
+
         // Rotate the node's request to a new demand-weighted material
         if (availableMaterials != null && availableMaterials.Length > 0)
         {
@@ -180,7 +220,7 @@ public class DeliveryNode : MonoBehaviour
         {
             var m = availableMaterials[i];
             if (!m) continue;
-            total += GameManager.Instance.GetSpawnWeight(m);
+            total += GameManager.Instance.GetSpawnWeight(m) * (1f + level * nodeDemandBiasPerLevel);
         }
         if (total <= 0f) return availableMaterials[UnityEngine.Random.Range(0, availableMaterials.Length)];
 
@@ -190,7 +230,7 @@ public class DeliveryNode : MonoBehaviour
         {
             var m = availableMaterials[i];
             if (!m) continue;
-            acc += GameManager.Instance.GetSpawnWeight(m);
+            acc += GameManager.Instance.GetSpawnWeight(m) * (1f + level * nodeDemandBiasPerLevel);
             if (r <= acc) return m;
         }
         return availableMaterials[availableMaterials.Length - 1];

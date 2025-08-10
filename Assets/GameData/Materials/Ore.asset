@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: Ore
   m_EditorClassIdentifier: 
   materialName: Ore
-  materialColor: {r: 1, g: 1, b: 1, a: 1}
-  materialValue: 100
+  materialColor: {r: 0.5489943, g: 0.62464195, b: 0.6886792, a: 1}
+  materialValue: 120
   demandWeight: 1

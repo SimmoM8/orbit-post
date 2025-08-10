@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfc70ae3082074adbb778e675b591c77, type: 3}
   m_Name: Gas
   m_EditorClassIdentifier: 
-  materialName: Ore
-  materialColor: {r: 1, g: 1, b: 1, a: 1}
-  materialValue: 100
-  demandWeight: 1
+  materialName: Gas
+  materialColor: {r: 0.20425417, g: 0.8490566, b: 0.7666032, a: 1}
+  materialValue: 140
+  demandWeight: 1.1
