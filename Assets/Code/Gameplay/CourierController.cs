@@ -5,7 +5,9 @@ using UnityEngine;
 public class CourierController : MonoBehaviour
 {
     public float launchImpulse = 5f; // reduced from 8 for slower, more controllable flight
-    public int maxFuel = 500;               // launches per run
+    [Header("Fuel Tuning")]
+    public float maxFuel = 100f; // total fuel capacity
+    public float fuelCostPerImpulse = 20f; // fuel used per unit of |launch velocity|
     public float aimMaxLength = 3f;     // clamp drag vector
     public float predictionDt = 0.033f;
     public int predictionSteps = 30;
@@ -14,10 +16,12 @@ public class CourierController : MonoBehaviour
     Rigidbody2D rb;
     LineRenderer lr;
     Camera cam;
-    int fuel;
+    float fuel;
     bool aiming;
-    public int Fuel => fuel;
-    public void AddFuel(int amount) { fuel = Mathf.Clamp(fuel + amount, 0, maxFuel); }
+
+    public int Fuel => Mathf.CeilToInt(fuel);
+    public float FuelPercent => maxFuel <= 0f ? 0f : Mathf.Clamp01(fuel / maxFuel);
+    public void AddFuel(float amount) { fuel = Mathf.Clamp(fuel + amount, 0f, maxFuel); }
 
     void Awake()
     {
@@ -47,11 +51,34 @@ public class CourierController : MonoBehaviour
             {
                 Time.timeScale = 1f;
                 Vector2 v = ComputeLaunchVelocity();
-                rb.AddForce(v, ForceMode2D.Impulse);
-                fuel--;
-                aiming = false;
-                launched = true; // start moving
-                lr.positionCount = 0;
+
+                // Fuel cost scales with launch magnitude
+                float cost = v.magnitude * fuelCostPerImpulse;
+
+                // If not enough fuel, scale the impulse proportionally to available fuel
+                if (cost > fuel && fuel > 0f)
+                {
+                    float scale = fuel / Mathf.Max(cost, 1e-5f);
+                    v *= scale;
+                    cost = fuel;
+                }
+
+                if (fuel > 0f)
+                {
+                    rb.AddForce(v, ForceMode2D.Impulse);
+                    fuel = Mathf.Max(0f, fuel - cost);
+
+                    aiming = false;
+                    launched = true; // start moving
+                    lr.positionCount = 0;
+                }
+                else
+                {
+                    // No fuel: just exit aim without launching
+                    aiming = false;
+                    launched = false;
+                    lr.positionCount = 0;
+                }
             }
         }
 
