@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fad093d7864d24115b11fe66d1ce7f70, type: 3}
+  m_Name: PlanetPrefabLibrary_Default
+  m_EditorClassIdentifier: 
+  entries:
+  - size: 0
+    prefab: {fileID: 3747974145327513167, guid: 76a4413369a5f4b8d8cdbac898265dfb, type: 3}
+  - size: 1
+    prefab: {fileID: 3747974145327513167, guid: 140cbe07ba64c44ff8e7a4b7585186e4, type: 3}
+  - size: 2
+    prefab: {fileID: 3747974145327513167, guid: ec56045f56df94530a7eba88c6cbee5a, type: 3}
+  - size: 3
+    prefab: {fileID: 3747974145327513167, guid: df58225a685f24bb8b3cf4a5728c3af2, type: 3}
+  - size: 4
+    prefab: {fileID: 3747974145327513167, guid: 393ff3a75fe3e4044938d2c03ad38375, type: 3}
+  - size: 5
+    prefab: {fileID: 3747974145327513167, guid: 5a2fc19b7acef4ec0b6187026a91ed98, type: 3}
+  - size: 6
+    prefab: {fileID: 3747974145327513167, guid: bbcaf4371d0dd4eb5b53d963ff6f90b5, type: 3}
+  - size: 7
+    prefab: {fileID: 3747974145327513167, guid: bf229af7aa7ce46cab83062fc2010537, type: 3}

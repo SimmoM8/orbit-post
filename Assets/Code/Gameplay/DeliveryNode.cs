@@ -20,6 +20,17 @@ public class DeliveryNode : MonoBehaviour
     public int level = 1;
     public int progress = 0;
     public int requestGoal = 3;                  // deliveries needed to level up
+    // Backing field for authored request amount
+    private int _requestAmount = 3;
+    public int requestAmount
+    {
+        get => _requestAmount;
+        set
+        {
+            _requestAmount = Mathf.Max(1, value);
+            requestGoal = _requestAmount;
+        }
+    }
     public float influenceRadius = 7f;           // planets within this get a boost
     public float productionBoostPerLevel = 0.25f; // +25% per level to nearby planets
     public float nodeDemandBiasPerLevel = 0.10f;  // +10% per level when choosing next request
@@ -27,6 +38,8 @@ public class DeliveryNode : MonoBehaviour
     [Header("Post UI")]
     public Vector3 levelLabelOffset = new Vector3(0f, 1.55f, 0f);
     TextMeshPro levelTMP;
+    public Vector3 nameLabelOffset = new Vector3(0f, 2.0f, 0f);
+    TextMeshPro nameTMP;
 
     [Header("Material Requests")]
     public PackageType requestedMaterial;
@@ -35,6 +48,8 @@ public class DeliveryNode : MonoBehaviour
     [Header("Request UI")]
     public Vector3 requestLabelOffset = new Vector3(0f, 1.1f, 0f);
     TextMeshPro requestTMP;
+
+    public string displayName;
 
     public Action<DeliveryNode> onDelivered; // spawner subscribes
 
@@ -63,7 +78,19 @@ public class DeliveryNode : MonoBehaviour
             levelTMP.alignment = TextAlignmentOptions.Center;
             levelTMP.sortingOrder = 901;
         }
+        if (!nameTMP)
+        {
+            var goN = new GameObject("NameTMP");
+            goN.transform.SetParent(transform, false);
+            goN.transform.localPosition = nameLabelOffset;
+            nameTMP = goN.AddComponent<TextMeshPro>();
+            nameTMP.fontSize = 2.5f;
+            nameTMP.alignment = TextAlignmentOptions.Center;
+            nameTMP.sortingOrder = 902;
+            nameTMP.text = displayName;
+        }
         RefreshLevelUI();
+        RefreshNameUI();
     }
 
     void OnValidate()
@@ -71,6 +98,9 @@ public class DeliveryNode : MonoBehaviour
         var col = GetComponent<CircleCollider2D>();
         if (col) { col.isTrigger = true; col.radius = radius; }
         transform.localScale = Vector3.one * (radius * 2f);
+        if (_requestAmount != requestGoal)
+            _requestAmount = requestGoal;
+        RefreshNameUI();
     }
 
     public void SetRequest(PackageType mat)
@@ -90,6 +120,11 @@ public class DeliveryNode : MonoBehaviour
     void RefreshLevelUI()
     {
         if (levelTMP) levelTMP.text = $"L{level}";
+    }
+
+    void RefreshNameUI()
+    {
+        if (nameTMP) nameTMP.text = displayName;
     }
 
     void OnTriggerEnter2D(Collider2D other) => TryDeliver(other);

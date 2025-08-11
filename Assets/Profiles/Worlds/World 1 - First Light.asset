@@ -1,0 +1,60 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 754a7acf6f5524517961c6626e1e3dd7, type: 3}
+  m_Name: World 1 - First Light
+  m_EditorClassIdentifier: 
+  worldId: world_1
+  displayName: First Light
+  mode: 0
+  halfExtents: {x: 60, y: 60}
+  planetPrefabs: {fileID: 11400000, guid: a8c8aeeba94f5413882c43ba9bbc222f, type: 2}
+  postPrefab: {fileID: 1762191811916637731, guid: ced1371129fd849c28ce112806df2f4b, type: 3}
+  authoredPosts:
+  - position: {x: 3, y: 5}
+    startLevel: 0
+    displayName: 
+    influenceRadius: 0
+    initialRequestMaterial: {fileID: 11400000, guid: 6c5adedda63d342ed9c5e9f142505fc3, type: 2}
+    initialRequestAmount: 0
+  authoredPlanets:
+  - position: {x: -2, y: 3}
+    size: 5
+    type: 1
+    profile: {fileID: 0}
+    mass: 10
+  - position: {x: 5, y: 1}
+    size: 3
+    type: 3
+    profile: {fileID: 0}
+    mass: 20
+  - position: {x: -2, y: 6}
+    size: 2
+    type: 2
+    profile: {fileID: 0}
+    mass: 15
+  - position: {x: 4, y: -8}
+    size: 7
+    type: 1
+    profile: {fileID: 0}
+    mass: 30
+  - position: {x: 12, y: 0}
+    size: 0
+    type: 0
+    profile: {fileID: 0}
+    mass: 100
+  seed: 12345
+  postCountRange: {x: 5, y: 8}
+  planetCountRange: {x: 15, y: 24}
+  minPlanetSpacing: 7
+  minDistanceFromPost: 5
+  basePostInfluenceRadius: 12
+  influenceRadiusPerLevel: 3
