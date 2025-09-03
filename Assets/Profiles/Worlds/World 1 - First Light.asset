@@ -26,29 +26,29 @@ MonoBehaviour:
     initialRequestMaterial: {fileID: 11400000, guid: 6c5adedda63d342ed9c5e9f142505fc3, type: 2}
     initialRequestAmount: 0
   authoredPlanets:
-  - position: {x: -2, y: 3}
+  - position: {x: -12.488382, y: -0.587965}
     size: 5
     type: 1
     profile: {fileID: 0}
-    mass: 10
-  - position: {x: 5, y: 1}
+    mass: 50
+  - position: {x: -17.322311, y: -11.559227}
     size: 3
     type: 3
     profile: {fileID: 0}
-    mass: 20
-  - position: {x: -2, y: 6}
-    size: 2
+    mass: 50
+  - position: {x: -3.3485928, y: 9.412652}
+    size: 7
     type: 2
     profile: {fileID: 0}
-    mass: 15
-  - position: {x: 4, y: -8}
-    size: 7
+    mass: 20
+  - position: {x: 0.13102531, y: -19.82041}
+    size: 0
     type: 1
     profile: {fileID: 0}
-    mass: 30
-  - position: {x: 12, y: 0}
-    size: 0
-    type: 0
+    mass: 500
+  - position: {x: 11.999998, y: 0}
+    size: 1
+    type: 2
     profile: {fileID: 0}
     mass: 100
   seed: 12345

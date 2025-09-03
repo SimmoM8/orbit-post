@@ -71,7 +71,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 0.1
+  m_Radius: 0.2
 --- !u!114 &4257266125941120146
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -85,7 +85,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   mass: 0
-  radius: 0.1
+  radius: 0.2
   minRadiusClamp: 0.8
   syncColliderToRadius: 0
   profile: {fileID: 0}
@@ -93,7 +93,6 @@ MonoBehaviour:
   overrideMass: 0
   enforceUniformScale: 0
   spriteRef: {fileID: 0}
-  syncSpriteToRadius: 1
   useDebugColor: 0
   debugColorFromProfile: 1
   typeColorDefault: {r: 1, g: 1, b: 1, a: 1}
@@ -146,7 +145,7 @@ SpriteRenderer:
   m_SortingLayerID: 1942125761
   m_SortingLayer: 2
   m_SortingOrder: 0
-  m_Sprite: {fileID: -2413806693520163455, guid: d4697f9a151084e049db525da685a918, type: 3}
+  m_Sprite: {fileID: -2006003998553690549, guid: 04e00b9d08c5149659548c865fe05af6, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -205,8 +204,8 @@ MonoBehaviour:
   targetRenderer: {fileID: 6476800375659255513}
   spritesByType:
   - type: 1
-    sprite: {fileID: -2413806693520163455, guid: d4697f9a151084e049db525da685a918, type: 3}
+    sprite: {fileID: 8212754045632176040, guid: 2229474370267402f8583ec4aad9a8b2, type: 3}
   - type: 2
-    sprite: {fileID: -2413806693520163455, guid: d4697f9a151084e049db525da685a918, type: 3}
+    sprite: {fileID: 8890882855791291662, guid: efa5af918c9514ceea7b1403b6b70537, type: 3}
   - type: 3
-    sprite: {fileID: -2413806693520163455, guid: d4697f9a151084e049db525da685a918, type: 3}
+    sprite: {fileID: -2006003998553690549, guid: 04e00b9d08c5149659548c865fe05af6, type: 3}
