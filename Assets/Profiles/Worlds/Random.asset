@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 754a7acf6f5524517961c6626e1e3dd7, type: 3}
+  m_Name: Random
+  m_EditorClassIdentifier: 
+  worldId: world_1
+  displayName: First Light
+  mode: 0
+  halfExtents: {x: 60, y: 60}
+  planetPrefabs: {fileID: 0}
+  postPrefab: {fileID: 0}
+  authoredPosts: []
+  authoredPlanets: []
+  seed: 12345
+  postCountRange: {x: 5, y: 8}
+  planetCountRange: {x: 15, y: 24}
+  minPostSpacing: 0
+  minPlanetSpacing: 7
+  minDistanceFromPost: 5
+  edgePaddingPosts: 1
+  basePostInfluenceRadius: 12
+  influenceRadiusPerLevel: 3

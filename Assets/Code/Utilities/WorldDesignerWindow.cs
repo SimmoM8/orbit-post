@@ -17,6 +17,7 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private bool _lockPreview = true; // prevent selecting/moving preview instances
     [SerializeField] private bool _snapEnabled = false;
     [SerializeField] private float _snapSize = 0.5f;
+    [SerializeField] private bool _showProceduralInfo = false;
 
     // EditorPrefs keys for persistence
     private const string PrefSnapEnabledKey = "WorldDesigner_SnapEnabled";
@@ -89,6 +90,25 @@ public class WorldDesignerWindow : EditorWindow
         if (_world.planetPrefabs == null)
         {
             EditorGUILayout.HelpBox("WorldDefinition is missing a Planet Prefab Library.", MessageType.Warning);
+        }
+
+        // Procedural settings quick reference (read-only)
+        _showProceduralInfo = EditorGUILayout.Foldout(_showProceduralInfo, "Procedural Settings (read-only)");
+        if (_showProceduralInfo)
+        {
+            using (new EditorGUILayout.VerticalScope("box"))
+            {
+                EditorGUILayout.LabelField("Mode", _world.mode.ToString());
+                EditorGUILayout.LabelField("Seed", _world.seed.ToString());
+                EditorGUILayout.LabelField("Post Count", $"{_world.postCountRange.x}–{_world.postCountRange.y}");
+                EditorGUILayout.LabelField("Planet Count", $"{_world.planetCountRange.x}–{_world.planetCountRange.y}");
+                EditorGUILayout.LabelField("Min Post Spacing", _world.minPostSpacing.ToString("0.###"));
+                EditorGUILayout.LabelField("Edge Padding (Posts)", _world.edgePaddingPosts.ToString("0.###"));
+                EditorGUILayout.LabelField("Min Planet Spacing", _world.minPlanetSpacing.ToString("0.###"));
+                EditorGUILayout.LabelField("Min Dist From Post", _world.minDistanceFromPost.ToString("0.###"));
+                EditorGUILayout.LabelField("Bounds (±x, ±y)", $"±{_world.halfExtents.x:0.###}, ±{_world.halfExtents.y:0.###}");
+                EditorGUILayout.HelpBox("Procedural placement enforces min spacings; posts also keep edge padding + their radius away from edges.", MessageType.None);
+            }
         }
 
         // Begin scrollable content (so large worlds are manageable)

@@ -46,8 +46,12 @@ public class WorldDefinition : ScriptableObject
     public int seed = 12345;
     public Vector2Int postCountRange = new Vector2Int(5, 8);
     public Vector2Int planetCountRange = new Vector2Int(15, 24);
+    [Tooltip("Optional: minimum spacing between posts during procedural placement. 0 = disabled.")]
+    public float minPostSpacing = 0f;
     public float minPlanetSpacing = 7f;
     public float minDistanceFromPost = 5f;
+    [Tooltip("Extra padding from world edges for posts during procedural placement. This is added on top of the post's collider radius if available.")]
+    public float edgePaddingPosts = 1.0f;
 
     [Header("Gameplay Defaults")]
     public float basePostInfluenceRadius = 12f; // level 1
