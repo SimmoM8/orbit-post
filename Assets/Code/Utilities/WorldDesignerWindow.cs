@@ -3,7 +3,6 @@ using UnityEditor;
 using UnityEngine;
 using System.Linq;
 using System.Text;
-using UnityEditorInternal;
 
 // World Designer: place planets visually without entering Play mode.
 // Open via: Tools → Orbit Post → World Designer
@@ -45,8 +44,6 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private bool _foldPlanets = true;
     [SerializeField] private bool[] _postItemFoldouts;
     [SerializeField] private bool[] _planetItemFoldouts;
-    private ReorderableList _planetRL;
-    [SerializeField] private bool _useReorderablePlanets = true;
 
     // Batch Edit (Planets)
     [SerializeField] private bool _batchPlanetApplySize = false;
@@ -238,14 +235,7 @@ public class WorldDesignerWindow : EditorWindow
         DrawPostsList();
 
         EditorGUILayout.Space();
-        if (_useReorderablePlanets)
-        {
-            DrawPlanetsListReorderable();
-        }
-        else
-        {
-            DrawPlanetsList();
-        }
+        DrawPlanetsList();
 
         EditorGUILayout.Space();
         using (new EditorGUILayout.HorizontalScope())
