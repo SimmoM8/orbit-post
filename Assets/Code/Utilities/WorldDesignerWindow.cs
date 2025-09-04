@@ -17,11 +17,13 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private bool _lockPreview = true; // prevent selecting/moving preview instances
     [SerializeField] private bool _snapEnabled = false;
     [SerializeField] private float _snapSize = 0.5f;
+    [SerializeField] private bool _showBounds = true;
     [SerializeField] private bool _showProceduralInfo = false;
 
     // EditorPrefs keys for persistence
     private const string PrefSnapEnabledKey = "WorldDesigner_SnapEnabled";
     private const string PrefSnapSizeKey = "WorldDesigner_SnapSize";
+    private const string PrefShowBoundsKey = "WorldDesigner_ShowBounds";
 
     // Handle colors by type (editor-only hinting)
     private static readonly Color _typeDefault = new Color(1f, 1f, 1f, 0.8f);
@@ -48,6 +50,8 @@ public class WorldDesignerWindow : EditorWindow
             _snapEnabled = EditorPrefs.GetBool(PrefSnapEnabledKey, _snapEnabled);
         if (EditorPrefs.HasKey(PrefSnapSizeKey))
             _snapSize = Mathf.Max(0.01f, EditorPrefs.GetFloat(PrefSnapSizeKey, _snapSize));
+        if (EditorPrefs.HasKey(PrefShowBoundsKey))
+            _showBounds = EditorPrefs.GetBool(PrefShowBoundsKey, _showBounds);
     }
 
     private void OnDisable()
@@ -56,6 +60,7 @@ public class WorldDesignerWindow : EditorWindow
         // Save snap prefs
         EditorPrefs.SetBool(PrefSnapEnabledKey, _snapEnabled);
         EditorPrefs.SetFloat(PrefSnapSizeKey, Mathf.Max(0.01f, _snapSize));
+        EditorPrefs.SetBool(PrefShowBoundsKey, _showBounds);
     }
 
     private void HookScene(bool hook)
@@ -327,6 +332,7 @@ public class WorldDesignerWindow : EditorWindow
             {
                 EditorGUILayout.LabelField($"#{i}", GUILayout.Width(28));
                 ap.position = EditorGUILayout.Vector2Field("Position", ap.position);
+                if (GUILayout.Button("◉", GUILayout.Width(24))) FocusSceneOn(ap.position);
                 if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = i;
                 if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = i;
             }
@@ -410,7 +416,53 @@ public class WorldDesignerWindow : EditorWindow
     {
         if (!_world || _world.authoredPlanets == null) return;
 
+        // Scene overlay: small toolbar for grid, snap size, and bounds toggle
+        Handles.BeginGUI();
+        {
+            var r = new Rect(12, 12, 250, 64);
+            GUILayout.BeginArea(r, GUIContent.none, GUI.skin.box);
+            GUILayout.Label("World Designer");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                bool prevSnap = _snapEnabled;
+                float prevSnapSize = _snapSize;
+                bool prevShowBounds = _showBounds;
+
+                _snapEnabled = GUILayout.Toggle(_snapEnabled, new GUIContent("Grid", "Toggle snap-to-grid and grid overlay"), GUILayout.Width(60));
+                using (new EditorGUI.DisabledScope(!_snapEnabled))
+                {
+                    GUILayout.Label("Size", GUILayout.Width(32));
+                    string snapStr = GUILayout.TextField(_snapSize.ToString("0.##"), GUILayout.Width(48));
+                    if (float.TryParse(snapStr, out float parsed))
+                        _snapSize = Mathf.Max(0.01f, parsed);
+                }
+                _showBounds = GUILayout.Toggle(_showBounds, new GUIContent("Bounds", "Toggle world bounds overlay"), GUILayout.Width(70));
+
+                if (GUILayout.Button(new GUIContent("Frame", "Center and zoom the Scene view to fit the world bounds"), GUILayout.Width(64)))
+                {
+                    FrameWorldBounds();
+                }
+
+                if (_snapEnabled != prevSnap) EditorPrefs.SetBool(PrefSnapEnabledKey, _snapEnabled);
+                if (!Mathf.Approximately(_snapSize, prevSnapSize)) EditorPrefs.SetFloat(PrefSnapSizeKey, Mathf.Max(0.01f, _snapSize));
+                if (_showBounds != prevShowBounds) EditorPrefs.SetBool(PrefShowBoundsKey, _showBounds);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(!_world))
+                {
+                    if (GUILayout.Button(new GUIContent("Preview", "Spawn a preview of the authored world"), GUILayout.Width(80)))
+                        PreviewWorld();
+                    if (GUILayout.Button(new GUIContent("Clear", "Remove the preview root from the scene"), GUILayout.Width(80)))
+                        ClearPreview();
+                }
+            }
+            GUILayout.EndArea();
+        }
+        Handles.EndGUI();
+
         // Draw world bounds (centered at 0,0) for visual guidance
+        if (_showBounds)
         {
             var hx = _world.halfExtents.x;
             var hy = _world.halfExtents.y;
@@ -700,6 +752,21 @@ public class WorldDesignerWindow : EditorWindow
             sv.LookAt(pivot);
             sv.Repaint();
         }
+    }
+
+    private void FrameWorldBounds()
+    {
+        if (!_world) return;
+        var sv = SceneView.lastActiveSceneView;
+        if (sv == null) return;
+        float hx = Mathf.Max(0.01f, _world.halfExtents.x);
+        float hy = Mathf.Max(0.01f, _world.halfExtents.y);
+        float maxExtent = Mathf.Max(hx, hy);
+        // Ensure orthographic for 2D layout and frame with a small margin
+        sv.orthographic = true;
+        sv.pivot = Vector3.zero;
+        sv.size = maxExtent + 2f;
+        sv.Repaint();
     }
 }
 #endif
