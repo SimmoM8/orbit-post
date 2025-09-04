@@ -29,11 +29,19 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private string _postFilterName = "";
     [SerializeField] private bool _postFilterByMinLevel = false;
     [SerializeField] private int _postFilterMinLevel = 1;
+    [SerializeField] private bool _previewPosts = true;
+    [SerializeField] private bool _previewPlanets = true;
+    [SerializeField] private bool _previewIsolateSelection = false;
+    [SerializeField] private bool _livePreview = false;
 
     // EditorPrefs keys for persistence
     private const string PrefSnapEnabledKey = "WorldDesigner_SnapEnabled";
     private const string PrefSnapSizeKey = "WorldDesigner_SnapSize";
     private const string PrefShowBoundsKey = "WorldDesigner_ShowBounds";
+    private const string PrefPreviewPostsKey = "WorldDesigner_PreviewPosts";
+    private const string PrefPreviewPlanetsKey = "WorldDesigner_PreviewPlanets";
+    private const string PrefPreviewIsolateKey = "WorldDesigner_PreviewIsolate";
+    private const string PrefLivePreviewKey = "WorldDesigner_LivePreview";
 
     // Handle colors by type (editor-only hinting)
     private static readonly Color _typeDefault = new Color(1f, 1f, 1f, 0.8f);
@@ -62,6 +70,14 @@ public class WorldDesignerWindow : EditorWindow
             _snapSize = Mathf.Max(0.01f, EditorPrefs.GetFloat(PrefSnapSizeKey, _snapSize));
         if (EditorPrefs.HasKey(PrefShowBoundsKey))
             _showBounds = EditorPrefs.GetBool(PrefShowBoundsKey, _showBounds);
+        if (EditorPrefs.HasKey(PrefPreviewPostsKey))
+            _previewPosts = EditorPrefs.GetBool(PrefPreviewPostsKey, _previewPosts);
+        if (EditorPrefs.HasKey(PrefPreviewPlanetsKey))
+            _previewPlanets = EditorPrefs.GetBool(PrefPreviewPlanetsKey, _previewPlanets);
+        if (EditorPrefs.HasKey(PrefPreviewIsolateKey))
+            _previewIsolateSelection = EditorPrefs.GetBool(PrefPreviewIsolateKey, _previewIsolateSelection);
+        if (EditorPrefs.HasKey(PrefLivePreviewKey))
+            _livePreview = EditorPrefs.GetBool(PrefLivePreviewKey, _livePreview);
     }
 
     private void OnDisable()
@@ -71,6 +87,10 @@ public class WorldDesignerWindow : EditorWindow
         EditorPrefs.SetBool(PrefSnapEnabledKey, _snapEnabled);
         EditorPrefs.SetFloat(PrefSnapSizeKey, Mathf.Max(0.01f, _snapSize));
         EditorPrefs.SetBool(PrefShowBoundsKey, _showBounds);
+        EditorPrefs.SetBool(PrefPreviewPostsKey, _previewPosts);
+        EditorPrefs.SetBool(PrefPreviewPlanetsKey, _previewPlanets);
+        EditorPrefs.SetBool(PrefPreviewIsolateKey, _previewIsolateSelection);
+        EditorPrefs.SetBool(PrefLivePreviewKey, _livePreview);
     }
 
     private void HookScene(bool hook)
@@ -316,6 +336,7 @@ public class WorldDesignerWindow : EditorWindow
                 EditorUtility.SetDirty(_world);
                 Repaint();
                 SceneView.RepaintAll();
+                if (_livePreview) PreviewWorld();
             }
         }
 
@@ -333,6 +354,7 @@ public class WorldDesignerWindow : EditorWindow
             list.Insert(duplicateAt + 1, dup);
             _world.authoredPosts = list.ToArray();
             EditorUtility.SetDirty(_world);
+            if (_livePreview) PreviewWorld();
         }
 
         if (removeAt >= 0)
@@ -340,6 +362,7 @@ public class WorldDesignerWindow : EditorWindow
             Undo.RecordObject(_world, "Remove Post");
             _world.authoredPosts = _world.authoredPosts.Where((_, idx) => idx != removeAt).ToArray();
             EditorUtility.SetDirty(_world);
+            if (_livePreview) PreviewWorld();
         }
 
         if (EditorGUI.EndChangeCheck())
@@ -348,6 +371,7 @@ public class WorldDesignerWindow : EditorWindow
             EditorUtility.SetDirty(_world);
             Repaint();
             SceneView.RepaintAll();
+            if (_livePreview) PreviewWorld();
         }
     }
 
@@ -375,6 +399,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void DuplicateSelectedPosts()
@@ -401,6 +426,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void DeleteSelectedPosts()
@@ -414,6 +440,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void SnapSelectedPosts()
@@ -438,6 +465,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void DuplicateSelectedPlanets()
@@ -468,6 +496,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void DeleteSelectedPlanets()
@@ -481,6 +510,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void SnapSelectedPlanets()
@@ -508,6 +538,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void DrawPlanetsList()
@@ -642,6 +673,7 @@ public class WorldDesignerWindow : EditorWindow
             list.Insert(duplicateAt + 1, dup);
             _world.authoredPlanets = list.ToArray();
             EditorUtility.SetDirty(_world);
+            if (_livePreview) PreviewWorld();
         }
 
         if (removeAt >= 0)
@@ -649,6 +681,7 @@ public class WorldDesignerWindow : EditorWindow
             Undo.RecordObject(_world, "Remove Planet");
             _world.authoredPlanets = _world.authoredPlanets.Where((_, idx) => idx != removeAt).ToArray();
             EditorUtility.SetDirty(_world);
+            if (_livePreview) PreviewWorld();
         }
 
         if (EditorGUI.EndChangeCheck())
@@ -657,6 +690,7 @@ public class WorldDesignerWindow : EditorWindow
             EditorUtility.SetDirty(_world);
             Repaint();
             SceneView.RepaintAll();
+            if (_livePreview) PreviewWorld();
         }
     }
 
@@ -676,6 +710,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void SortPlanetsByX()
@@ -686,6 +721,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
     }
 
     private void OnSceneGUI(SceneView sv)
@@ -725,12 +761,43 @@ public class WorldDesignerWindow : EditorWindow
             }
             using (new EditorGUILayout.HorizontalScope())
             {
+                bool prevPosts = _previewPosts;
+                bool prevPlanets = _previewPlanets;
+                bool prevIso = _previewIsolateSelection;
+                _previewPosts = GUILayout.Toggle(_previewPosts, new GUIContent("Posts", "Include Posts in Preview"), GUILayout.Width(64));
+                _previewPlanets = GUILayout.Toggle(_previewPlanets, new GUIContent("Planets", "Include Planets in Preview"), GUILayout.Width(72));
+                _previewIsolateSelection = GUILayout.Toggle(_previewIsolateSelection, new GUIContent("Isolate", "Preview only selected rows"), GUILayout.Width(80));
+                if (_previewPosts != prevPosts)
+                {
+                    EditorPrefs.SetBool(PrefPreviewPostsKey, _previewPosts);
+                    if (_livePreview) PreviewWorld();
+                }
+                if (_previewPlanets != prevPlanets)
+                {
+                    EditorPrefs.SetBool(PrefPreviewPlanetsKey, _previewPlanets);
+                    if (_livePreview) PreviewWorld();
+                }
+                if (_previewIsolateSelection != prevIso)
+                {
+                    EditorPrefs.SetBool(PrefPreviewIsolateKey, _previewIsolateSelection);
+                    if (_livePreview) PreviewWorld();
+                }
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
                 using (new EditorGUI.DisabledScope(!_world))
                 {
                     if (GUILayout.Button(new GUIContent("Preview", "Spawn a preview of the authored world"), GUILayout.Width(80)))
                         PreviewWorld();
                     if (GUILayout.Button(new GUIContent("Clear", "Remove the preview root from the scene"), GUILayout.Width(80)))
                         ClearPreview();
+                    bool prevLive = _livePreview;
+                    _livePreview = GUILayout.Toggle(_livePreview, new GUIContent("Live", "Auto-refresh preview on data change"), GUILayout.Width(60));
+                    if (_livePreview != prevLive)
+                    {
+                        EditorPrefs.SetBool(PrefLivePreviewKey, _livePreview);
+                        if (_livePreview) PreviewWorld();
+                    }
                 }
             }
             GUILayout.EndArea();
@@ -827,6 +894,7 @@ public class WorldDesignerWindow : EditorWindow
                     ap.position = clampedP;
                     _world.authoredPosts[i] = ap;
                     EditorUtility.SetDirty(_world);
+                    if (_livePreview) PreviewWorld();
                 }
 
                 // Label
@@ -877,6 +945,7 @@ public class WorldDesignerWindow : EditorWindow
                 ap.position = clamped;
                 _world.authoredPlanets[i] = ap;
                 EditorUtility.SetDirty(_world);
+                if (_livePreview) PreviewWorld();
             }
 
             // Label
@@ -952,10 +1021,13 @@ public class WorldDesignerWindow : EditorWindow
         root.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
 
         // Spawn POSTS via runtime rules (if prefab exists)
-        if (_world.authoredPosts != null && _world.postPrefab)
+        if (_previewPosts && _world.authoredPosts != null && _world.postPrefab)
         {
-            foreach (var post in _world.authoredPosts)
+            var selected = _previewIsolateSelection ? new System.Collections.Generic.HashSet<int>(_selPosts) : null;
+            for (int i = 0; i < _world.authoredPosts.Length; i++)
             {
+                if (selected != null && !selected.Contains(i)) continue;
+                var post = _world.authoredPosts[i];
                 var go = (GameObject)PrefabUtility.InstantiatePrefab(_world.postPrefab);
                 go.transform.SetParent(root.transform);
                 go.transform.position = post.position;
@@ -970,10 +1042,13 @@ public class WorldDesignerWindow : EditorWindow
         }
 
         // Spawn PLANETS via the same rules as runtime builder (size prefab + type + profile + mass)
-        if (_world.authoredPlanets != null && _world.planetPrefabs != null)
+        if (_previewPlanets && _world.authoredPlanets != null && _world.planetPrefabs != null)
         {
-            foreach (var ap in _world.authoredPlanets)
+            var selected = _previewIsolateSelection ? new System.Collections.Generic.HashSet<int>(_selPlanets) : null;
+            for (int i = 0; i < _world.authoredPlanets.Length; i++)
             {
+                if (selected != null && !selected.Contains(i)) continue;
+                var ap = _world.authoredPlanets[i];
                 if (!_world.planetPrefabs.TryGet(ap.size, out var prefab) || !prefab) continue;
                 var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
                 go.transform.SetParent(root.transform);
