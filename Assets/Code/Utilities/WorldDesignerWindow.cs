@@ -2,11 +2,14 @@
 using UnityEditor;
 using UnityEngine;
 using System.Linq;
+using System.Text;
+using UnityEditorInternal;
 
 // World Designer: place planets visually without entering Play mode.
 // Open via: Tools → Orbit Post → World Designer
 public class WorldDesignerWindow : EditorWindow
 {
+    private enum PlanetGroupBy { None, Size, Type }
     // Selected world asset
     [SerializeField] private WorldDefinition _world;
 
@@ -25,6 +28,9 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private PlanetSize _filterSize = PlanetSize.Medium;
     [SerializeField] private bool _filterByType = false;
     [SerializeField] private PlanetType _filterType = PlanetType.Default;
+    [SerializeField] private PlanetGroupBy _groupBy = PlanetGroupBy.None;
+    [SerializeField] private bool[] _sizeFoldouts;
+    [SerializeField] private bool[] _typeFoldouts;
     [SerializeField] private bool _postFilterByName = false;
     [SerializeField] private string _postFilterName = "";
     [SerializeField] private bool _postFilterByMinLevel = false;
@@ -33,6 +39,34 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private bool _previewPlanets = true;
     [SerializeField] private bool _previewIsolateSelection = false;
     [SerializeField] private bool _livePreview = false;
+    [SerializeField] private bool _alignSnapEnabled = true;
+    [SerializeField] private float _alignSnapThreshold = 0.25f;
+    [SerializeField] private bool _foldPosts = true;
+    [SerializeField] private bool _foldPlanets = true;
+    [SerializeField] private bool[] _postItemFoldouts;
+    [SerializeField] private bool[] _planetItemFoldouts;
+    private ReorderableList _planetRL;
+    [SerializeField] private bool _useReorderablePlanets = true;
+
+    // Batch Edit (Planets)
+    [SerializeField] private bool _batchPlanetApplySize = false;
+    [SerializeField] private PlanetSize _batchPlanetSize = PlanetSize.Medium;
+    [SerializeField] private bool _batchPlanetApplyType = false;
+    [SerializeField] private PlanetType _batchPlanetType = PlanetType.Default;
+    [SerializeField] private bool _batchPlanetApplyMass = false;
+    [SerializeField] private float _batchPlanetMass = 20f;
+    [SerializeField] private bool _batchPlanetApplyProfile = false;
+    [SerializeField] private PlanetProfile _batchPlanetProfile = null;
+
+    // Batch Edit (Posts)
+    [SerializeField] private bool _batchPostApplyLevel = false;
+    [SerializeField] private int _batchPostLevel = 1;
+    [SerializeField] private bool _batchPostApplyInfluence = false;
+    [SerializeField] private float _batchPostInfluence = 7f;
+    [SerializeField] private bool _batchPostApplyMaterial = false;
+    [SerializeField] private PackageType _batchPostMaterial = null;
+    [SerializeField] private bool _batchPostApplyAmount = false;
+    [SerializeField] private int _batchPostAmount = 3;
 
     // EditorPrefs keys for persistence
     private const string PrefSnapEnabledKey = "WorldDesigner_SnapEnabled";
@@ -42,6 +76,13 @@ public class WorldDesignerWindow : EditorWindow
     private const string PrefPreviewPlanetsKey = "WorldDesigner_PreviewPlanets";
     private const string PrefPreviewIsolateKey = "WorldDesigner_PreviewIsolate";
     private const string PrefLivePreviewKey = "WorldDesigner_LivePreview";
+    private const string PrefGroupByKey = "WorldDesigner_GroupBy";
+    private const string PrefFoldPostsKey = "WorldDesigner_FoldPosts";
+    private const string PrefFoldPlanetsKey = "WorldDesigner_FoldPlanets";
+    private const string PrefPostSelectionKey = "WorldDesigner_PostSelection";
+    private const string PrefPlanetSelectionKey = "WorldDesigner_PlanetSelection";
+    private const string PrefAlignEnabledKey = "WorldDesigner_AlignEnabled";
+    private const string PrefAlignThresholdKey = "WorldDesigner_AlignThreshold";
 
     // Handle colors by type (editor-only hinting)
     private static readonly Color _typeDefault = new Color(1f, 1f, 1f, 0.8f);
@@ -78,6 +119,20 @@ public class WorldDesignerWindow : EditorWindow
             _previewIsolateSelection = EditorPrefs.GetBool(PrefPreviewIsolateKey, _previewIsolateSelection);
         if (EditorPrefs.HasKey(PrefLivePreviewKey))
             _livePreview = EditorPrefs.GetBool(PrefLivePreviewKey, _livePreview);
+        if (EditorPrefs.HasKey(PrefGroupByKey))
+            _groupBy = (PlanetGroupBy)EditorPrefs.GetInt(PrefGroupByKey, (int)_groupBy);
+        if (EditorPrefs.HasKey(PrefFoldPostsKey))
+            _foldPosts = EditorPrefs.GetBool(PrefFoldPostsKey, _foldPosts);
+        if (EditorPrefs.HasKey(PrefFoldPlanetsKey))
+            _foldPlanets = EditorPrefs.GetBool(PrefFoldPlanetsKey, _foldPlanets);
+        if (EditorPrefs.HasKey(PrefAlignEnabledKey))
+            _alignSnapEnabled = EditorPrefs.GetBool(PrefAlignEnabledKey, _alignSnapEnabled);
+        if (EditorPrefs.HasKey(PrefAlignThresholdKey))
+            _alignSnapThreshold = Mathf.Max(0.001f, EditorPrefs.GetFloat(PrefAlignThresholdKey, _alignSnapThreshold));
+
+        // Attempt to load per-item foldouts for current world (if any)
+        TryLoadItemFoldouts();
+        TryLoadSelections();
     }
 
     private void OnDisable()
@@ -91,6 +146,15 @@ public class WorldDesignerWindow : EditorWindow
         EditorPrefs.SetBool(PrefPreviewPlanetsKey, _previewPlanets);
         EditorPrefs.SetBool(PrefPreviewIsolateKey, _previewIsolateSelection);
         EditorPrefs.SetBool(PrefLivePreviewKey, _livePreview);
+        EditorPrefs.SetInt(PrefGroupByKey, (int)_groupBy);
+        EditorPrefs.SetBool(PrefFoldPostsKey, _foldPosts);
+        EditorPrefs.SetBool(PrefFoldPlanetsKey, _foldPlanets);
+        EditorPrefs.SetBool(PrefAlignEnabledKey, _alignSnapEnabled);
+        EditorPrefs.SetFloat(PrefAlignThresholdKey, Mathf.Max(0.001f, _alignSnapThreshold));
+
+        // Save per-item foldouts for current world
+        SaveItemFoldouts();
+        SaveSelections();
     }
 
     private void HookScene(bool hook)
@@ -166,12 +230,22 @@ public class WorldDesignerWindow : EditorWindow
         // Begin scrollable content (so large worlds are manageable)
         _scroll = EditorGUILayout.BeginScrollView(_scroll);
 
+        // Batch Edit Panel
+        DrawBatchEditPanel();
+
         // Authored posts list (read/write)
         EditorGUILayout.Space();
         DrawPostsList();
 
         EditorGUILayout.Space();
-        DrawPlanetsList();
+        if (_useReorderablePlanets)
+        {
+            DrawPlanetsListReorderable();
+        }
+        else
+        {
+            DrawPlanetsList();
+        }
 
         EditorGUILayout.Space();
         using (new EditorGUILayout.HorizontalScope())
@@ -229,12 +303,147 @@ public class WorldDesignerWindow : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    private void DrawBatchEditPanel()
+    {
+        EditorGUILayout.LabelField("Batch Edit", EditorStyles.boldLabel);
+        using (new EditorGUILayout.HorizontalScope("box"))
+        {
+            // Planets column
+            using (new EditorGUILayout.VerticalScope())
+            {
+                EditorGUILayout.LabelField("Planets", EditorStyles.miniBoldLabel);
+                _batchPlanetApplySize = EditorGUILayout.ToggleLeft("Apply Size", _batchPlanetApplySize);
+                using (new EditorGUI.DisabledScope(!_batchPlanetApplySize))
+                {
+                    _batchPlanetSize = (PlanetSize)EditorGUILayout.EnumPopup("Size", _batchPlanetSize);
+                }
+                _batchPlanetApplyType = EditorGUILayout.ToggleLeft("Apply Type", _batchPlanetApplyType);
+                using (new EditorGUI.DisabledScope(!_batchPlanetApplyType))
+                {
+                    _batchPlanetType = (PlanetType)EditorGUILayout.EnumPopup("Type", _batchPlanetType);
+                }
+                _batchPlanetApplyMass = EditorGUILayout.ToggleLeft("Apply Mass", _batchPlanetApplyMass);
+                using (new EditorGUI.DisabledScope(!_batchPlanetApplyMass))
+                {
+                    _batchPlanetMass = EditorGUILayout.FloatField("Mass", _batchPlanetMass);
+                }
+                _batchPlanetApplyProfile = EditorGUILayout.ToggleLeft("Apply Profile", _batchPlanetApplyProfile);
+                using (new EditorGUI.DisabledScope(!_batchPlanetApplyProfile))
+                {
+                    _batchPlanetProfile = (PlanetProfile)EditorGUILayout.ObjectField("Profile", _batchPlanetProfile, typeof(PlanetProfile), false);
+                }
+                using (new EditorGUI.DisabledScope(_selPlanets == null || _selPlanets.Count == 0))
+                {
+                    if (GUILayout.Button($"Apply to {_selPlanets.Count} selected planet(s)"))
+                    {
+                        ApplyBatchToSelectedPlanets();
+                    }
+                }
+            }
+
+            GUILayout.Space(12);
+
+            // Posts column
+            using (new EditorGUILayout.VerticalScope())
+            {
+                EditorGUILayout.LabelField("Posts", EditorStyles.miniBoldLabel);
+                _batchPostApplyLevel = EditorGUILayout.ToggleLeft("Apply Level", _batchPostApplyLevel);
+                using (new EditorGUI.DisabledScope(!_batchPostApplyLevel))
+                {
+                    _batchPostLevel = Mathf.Max(1, EditorGUILayout.IntField("Level", _batchPostLevel));
+                }
+                _batchPostApplyInfluence = EditorGUILayout.ToggleLeft("Apply Influence Radius", _batchPostApplyInfluence);
+                using (new EditorGUI.DisabledScope(!_batchPostApplyInfluence))
+                {
+                    _batchPostInfluence = EditorGUILayout.FloatField("Influence", _batchPostInfluence);
+                }
+                _batchPostApplyMaterial = EditorGUILayout.ToggleLeft("Apply Request Material", _batchPostApplyMaterial);
+                using (new EditorGUI.DisabledScope(!_batchPostApplyMaterial))
+                {
+                    _batchPostMaterial = (PackageType)EditorGUILayout.ObjectField("Material", _batchPostMaterial, typeof(PackageType), false);
+                }
+                _batchPostApplyAmount = EditorGUILayout.ToggleLeft("Apply Request Amount", _batchPostApplyAmount);
+                using (new EditorGUI.DisabledScope(!_batchPostApplyAmount))
+                {
+                    _batchPostAmount = Mathf.Max(1, EditorGUILayout.IntField("Amount", _batchPostAmount));
+                }
+                using (new EditorGUI.DisabledScope(_selPosts == null || _selPosts.Count == 0))
+                {
+                    if (GUILayout.Button($"Apply to {_selPosts.Count} selected post(s)"))
+                    {
+                        ApplyBatchToSelectedPosts();
+                    }
+                }
+            }
+        }
+    }
+
+    private void ApplyBatchToSelectedPlanets()
+    {
+        if (_world == null || _world.authoredPlanets == null || _selPlanets == null || _selPlanets.Count == 0) return;
+        var indices = _selPlanets.Where(i => i >= 0 && i < _world.authoredPlanets.Length).Distinct().ToList();
+        if (indices.Count == 0) return;
+        Undo.RecordObject(_world, "Batch Edit Planets");
+        for (int k = 0; k < indices.Count; k++)
+        {
+            int i = indices[k];
+            var ap = _world.authoredPlanets[i];
+            if (_batchPlanetApplySize) ap.size = _batchPlanetSize;
+            if (_batchPlanetApplyType) ap.type = _batchPlanetType;
+            if (_batchPlanetApplyMass) ap.mass = _batchPlanetMass;
+            if (_batchPlanetApplyProfile) ap.profile = _batchPlanetProfile;
+            _world.authoredPlanets[i] = ap;
+        }
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
+    }
+
+    private void ApplyBatchToSelectedPosts()
+    {
+        if (_world == null || _world.authoredPosts == null || _selPosts == null || _selPosts.Count == 0) return;
+        var indices = _selPosts.Where(i => i >= 0 && i < _world.authoredPosts.Length).Distinct().ToList();
+        if (indices.Count == 0) return;
+        Undo.RecordObject(_world, "Batch Edit Posts");
+        for (int k = 0; k < indices.Count; k++)
+        {
+            int i = indices[k];
+            var ap = _world.authoredPosts[i];
+            if (_batchPostApplyLevel) ap.startLevel = Mathf.Max(1, _batchPostLevel);
+            if (_batchPostApplyInfluence) ap.influenceRadius = _batchPostInfluence;
+            if (_batchPostApplyMaterial) ap.initialRequestMaterial = _batchPostMaterial;
+            if (_batchPostApplyAmount) ap.initialRequestAmount = Mathf.Max(1, _batchPostAmount);
+            _world.authoredPosts[i] = ap;
+        }
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+        if (_livePreview) PreviewWorld();
+    }
+
     private void DrawPostsList()
     {
         if (_world.authoredPosts == null)
             _world.authoredPosts = new WorldDefinition.AuthoredPost[0];
 
-        EditorGUILayout.LabelField("Posts", EditorStyles.boldLabel);
+        // Section foldout
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            bool newFold = EditorGUILayout.Foldout(_foldPosts, "Posts", true);
+            if (newFold != _foldPosts) { _foldPosts = newFold; EditorPrefs.SetBool(PrefFoldPostsKey, _foldPosts); }
+        }
+        if (!_foldPosts) return;
+
+        EditorGUILayout.Space();
+
+        // Ensure per-item foldout states sized
+        if (_postItemFoldouts == null || _postItemFoldouts.Length != _world.authoredPosts.Length)
+        {
+            var old = _postItemFoldouts;
+            _postItemFoldouts = new bool[_world.authoredPosts.Length];
+            for (int i = 0; i < _postItemFoldouts.Length; i++) _postItemFoldouts[i] = true;
+        }
 
         // Filter bar for posts
         using (new EditorGUILayout.HorizontalScope())
@@ -263,10 +472,26 @@ public class WorldDesignerWindow : EditorWindow
             int total = _world.authoredPosts.Length;
             _selPosts.RemoveAll(i => i < 0 || i >= total);
             EditorGUILayout.LabelField($"Selected: {_selPosts.Count}", GUILayout.Width(100));
+            if (GUILayout.Button("Expand All", GUILayout.Width(90))) { SetAllPostFoldouts(true); }
+            if (GUILayout.Button("Collapse All", GUILayout.Width(100))) { SetAllPostFoldouts(false); }
             if (GUILayout.Button("All", GUILayout.Width(40)))
+            {
                 _selPosts = Enumerable.Range(0, total).ToList();
+                SavePostSelection();
+            }
             if (GUILayout.Button("None", GUILayout.Width(50)))
+            {
                 _selPosts.Clear();
+                SavePostSelection();
+            }
+            // Align/Distribute
+            using (new EditorGUI.DisabledScope(_selPosts.Count < 2))
+            {
+                if (GUILayout.Button("Align X", GUILayout.Width(80))) AlignSelectedPostsX();
+                if (GUILayout.Button("Align Y", GUILayout.Width(80))) AlignSelectedPostsY();
+                if (GUILayout.Button("Distribute X", GUILayout.Width(100))) DistributeSelectedPostsX();
+                if (GUILayout.Button("Distribute Y", GUILayout.Width(100))) DistributeSelectedPostsY();
+            }
             GUILayout.FlexibleSpace();
             using (new EditorGUI.DisabledScope(_selPosts.Count == 0))
             {
@@ -293,25 +518,43 @@ public class WorldDesignerWindow : EditorWindow
 
             using (new EditorGUILayout.HorizontalScope())
             {
+                // Per-item foldout toggle
+                bool open = i < _postItemFoldouts.Length ? _postItemFoldouts[i] : true;
+                string arrow = open ? "▼" : "▶";
+                if (GUILayout.Button(arrow, GUILayout.Width(18)))
+                {
+                    if (i < _postItemFoldouts.Length)
+                    {
+                        _postItemFoldouts[i] = !open;
+                        SaveItemFoldoutsPosts();
+                    }
+                    open = !open;
+                }
                 bool sel = _selPosts.Contains(i);
                 bool selNew = GUILayout.Toggle(sel, GUIContent.none, GUILayout.Width(18));
                 if (selNew != sel)
                 {
                     if (selNew) _selPosts.Add(i); else _selPosts.Remove(i);
+                    SavePostSelection();
                 }
                 EditorGUILayout.LabelField($"#{i}", GUILayout.Width(28));
                 ap.position = EditorGUILayout.Vector2Field("Position", ap.position);
                 GUILayout.Label($"L{Mathf.Max(1, ap.startLevel)}", EditorStyles.miniBoldLabel, GUILayout.Width(28));
+                // Validation badges
+                DrawPostBadges(i, ap);
                 if (GUILayout.Button("◉", GUILayout.Width(24))) FocusSceneOn(ap.position);
                 if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = i;
                 if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = i;
             }
-
-            ap.startLevel = Mathf.Max(1, EditorGUILayout.IntField("Start Level", ap.startLevel));
-            ap.displayName = EditorGUILayout.TextField("Display Name", ap.displayName);
-            ap.influenceRadius = EditorGUILayout.FloatField("Influence Radius", ap.influenceRadius);
-            ap.initialRequestMaterial = (PackageType)EditorGUILayout.ObjectField("Initial Request Material", ap.initialRequestMaterial, typeof(PackageType), false);
-            ap.initialRequestAmount = Mathf.Max(1, EditorGUILayout.IntField("Initial Request Amount", ap.initialRequestAmount));
+            // Details foldout body
+            if (i < _postItemFoldouts.Length && _postItemFoldouts[i])
+            {
+                ap.startLevel = Mathf.Max(1, EditorGUILayout.IntField("Start Level", ap.startLevel));
+                ap.displayName = EditorGUILayout.TextField("Display Name", ap.displayName);
+                ap.influenceRadius = EditorGUILayout.FloatField("Influence Radius", ap.influenceRadius);
+                ap.initialRequestMaterial = (PackageType)EditorGUILayout.ObjectField("Initial Request Material", ap.initialRequestMaterial, typeof(PackageType), false);
+                ap.initialRequestAmount = Mathf.Max(1, EditorGUILayout.IntField("Initial Request Amount", ap.initialRequestAmount));
+            }
 
             _world.authoredPosts[i] = ap;
             EditorGUILayout.EndVertical();
@@ -333,6 +576,9 @@ public class WorldDesignerWindow : EditorWindow
                     initialRequestAmount = 3
                 });
                 _world.authoredPosts = list.ToArray();
+                // Expand foldouts for new item and save
+                _postItemFoldouts = (_postItemFoldouts ?? new bool[0]).Concat(new[] { true }).ToArray();
+                SaveItemFoldoutsPosts();
                 EditorUtility.SetDirty(_world);
                 Repaint();
                 SceneView.RepaintAll();
@@ -353,6 +599,14 @@ public class WorldDesignerWindow : EditorWindow
             dup.position.y = Mathf.Clamp(dup.position.y, -_world.halfExtents.y, _world.halfExtents.y);
             list.Insert(duplicateAt + 1, dup);
             _world.authoredPosts = list.ToArray();
+            // Insert corresponding foldout state
+            if (_postItemFoldouts != null && _postItemFoldouts.Length >= duplicateAt + 1)
+            {
+                var f = _postItemFoldouts.ToList();
+                f.Insert(duplicateAt + 1, true);
+                _postItemFoldouts = f.ToArray();
+                SaveItemFoldoutsPosts();
+            }
             EditorUtility.SetDirty(_world);
             if (_livePreview) PreviewWorld();
         }
@@ -361,6 +615,11 @@ public class WorldDesignerWindow : EditorWindow
         {
             Undo.RecordObject(_world, "Remove Post");
             _world.authoredPosts = _world.authoredPosts.Where((_, idx) => idx != removeAt).ToArray();
+            if (_postItemFoldouts != null && _postItemFoldouts.Length > removeAt)
+            {
+                _postItemFoldouts = _postItemFoldouts.Where((_, idx) => idx != removeAt).ToArray();
+                SaveItemFoldoutsPosts();
+            }
             EditorUtility.SetDirty(_world);
             if (_livePreview) PreviewWorld();
         }
@@ -541,12 +800,193 @@ public class WorldDesignerWindow : EditorWindow
         if (_livePreview) PreviewWorld();
     }
 
+    private void AlignSelectedPostsX()
+    {
+        var sel = _selPosts.Where(i => i >= 0 && i < (_world.authoredPosts?.Length ?? 0)).Distinct().ToList();
+        if (sel.Count < 2) return;
+        Undo.RecordObject(_world, "Align Posts X");
+        float avg = sel.Average(i => _world.authoredPosts[i].position.x);
+        for (int k = 0; k < sel.Count; k++)
+        {
+            var ap = _world.authoredPosts[sel[k]];
+            ap.position.x = Mathf.Clamp(avg, -_world.halfExtents.x, _world.halfExtents.x);
+            _world.authoredPosts[sel[k]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
+    private void AlignSelectedPostsY()
+    {
+        var sel = _selPosts.Where(i => i >= 0 && i < (_world.authoredPosts?.Length ?? 0)).Distinct().ToList();
+        if (sel.Count < 2) return;
+        Undo.RecordObject(_world, "Align Posts Y");
+        float avg = sel.Average(i => _world.authoredPosts[i].position.y);
+        for (int k = 0; k < sel.Count; k++)
+        {
+            var ap = _world.authoredPosts[sel[k]];
+            ap.position.y = Mathf.Clamp(avg, -_world.halfExtents.y, _world.halfExtents.y);
+            _world.authoredPosts[sel[k]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
+    private void DistributeSelectedPostsX()
+    {
+        var sel = _selPosts.Where(i => i >= 0 && i < (_world.authoredPosts?.Length ?? 0)).Distinct().OrderBy(i => _world.authoredPosts[i].position.x).ToList();
+        if (sel.Count < 3) { AlignSelectedPostsX(); return; }
+        Undo.RecordObject(_world, "Distribute Posts X");
+        float min = _world.authoredPosts[sel.First()].position.x;
+        float max = _world.authoredPosts[sel.Last()].position.x;
+        if (Mathf.Approximately(min, max)) { AlignSelectedPostsX(); return; }
+        for (int idx = 1; idx < sel.Count - 1; idx++)
+        {
+            float t = (float)idx / (sel.Count - 1);
+            float x = Mathf.Lerp(min, max, t);
+            var ap = _world.authoredPosts[sel[idx]];
+            ap.position.x = Mathf.Clamp(x, -_world.halfExtents.x, _world.halfExtents.x);
+            _world.authoredPosts[sel[idx]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
+    private void DistributeSelectedPostsY()
+    {
+        var sel = _selPosts.Where(i => i >= 0 && i < (_world.authoredPosts?.Length ?? 0)).Distinct().OrderBy(i => _world.authoredPosts[i].position.y).ToList();
+        if (sel.Count < 3) { AlignSelectedPostsY(); return; }
+        Undo.RecordObject(_world, "Distribute Posts Y");
+        float min = _world.authoredPosts[sel.First()].position.y;
+        float max = _world.authoredPosts[sel.Last()].position.y;
+        if (Mathf.Approximately(min, max)) { AlignSelectedPostsY(); return; }
+        for (int idx = 1; idx < sel.Count - 1; idx++)
+        {
+            float t = (float)idx / (sel.Count - 1);
+            float y = Mathf.Lerp(min, max, t);
+            var ap = _world.authoredPosts[sel[idx]];
+            ap.position.y = Mathf.Clamp(y, -_world.halfExtents.y, _world.halfExtents.y);
+            _world.authoredPosts[sel[idx]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
+    private void AlignSelectedPlanetsX()
+    {
+        var sel = _selPlanets.Where(i => i >= 0 && i < (_world.authoredPlanets?.Length ?? 0)).Distinct().ToList();
+        if (sel.Count < 2) return;
+        Undo.RecordObject(_world, "Align Planets X");
+        float avg = sel.Average(i => _world.authoredPlanets[i].position.x);
+        for (int k = 0; k < sel.Count; k++)
+        {
+            var ap = _world.authoredPlanets[sel[k]];
+            float r = GetRadiusForSize(ap.size);
+            float availX = Mathf.Max(0f, _world.halfExtents.x - r);
+            ap.position.x = Mathf.Clamp(avg, -availX, availX);
+            _world.authoredPlanets[sel[k]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
+    private void AlignSelectedPlanetsY()
+    {
+        var sel = _selPlanets.Where(i => i >= 0 && i < (_world.authoredPlanets?.Length ?? 0)).Distinct().ToList();
+        if (sel.Count < 2) return;
+        Undo.RecordObject(_world, "Align Planets Y");
+        float avg = sel.Average(i => _world.authoredPlanets[i].position.y);
+        for (int k = 0; k < sel.Count; k++)
+        {
+            var ap = _world.authoredPlanets[sel[k]];
+            float r = GetRadiusForSize(ap.size);
+            float availY = Mathf.Max(0f, _world.halfExtents.y - r);
+            ap.position.y = Mathf.Clamp(avg, -availY, availY);
+            _world.authoredPlanets[sel[k]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
+    private void DistributeSelectedPlanetsX()
+    {
+        var sel = _selPlanets.Where(i => i >= 0 && i < (_world.authoredPlanets?.Length ?? 0)).Distinct().OrderBy(i => _world.authoredPlanets[i].position.x).ToList();
+        if (sel.Count < 3) { AlignSelectedPlanetsX(); return; }
+        Undo.RecordObject(_world, "Distribute Planets X");
+        float min = _world.authoredPlanets[sel.First()].position.x;
+        float max = _world.authoredPlanets[sel.Last()].position.x;
+        if (Mathf.Approximately(min, max)) { AlignSelectedPlanetsX(); return; }
+        for (int idx = 1; idx < sel.Count - 1; idx++)
+        {
+            float t = (float)idx / (sel.Count - 1);
+            float x = Mathf.Lerp(min, max, t);
+            var ap = _world.authoredPlanets[sel[idx]];
+            float r = GetRadiusForSize(ap.size);
+            float availX = Mathf.Max(0f, _world.halfExtents.x - r);
+            ap.position.x = Mathf.Clamp(x, -availX, availX);
+            _world.authoredPlanets[sel[idx]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
+    private void DistributeSelectedPlanetsY()
+    {
+        var sel = _selPlanets.Where(i => i >= 0 && i < (_world.authoredPlanets?.Length ?? 0)).Distinct().OrderBy(i => _world.authoredPlanets[i].position.y).ToList();
+        if (sel.Count < 3) { AlignSelectedPlanetsY(); return; }
+        Undo.RecordObject(_world, "Distribute Planets Y");
+        float min = _world.authoredPlanets[sel.First()].position.y;
+        float max = _world.authoredPlanets[sel.Last()].position.y;
+        if (Mathf.Approximately(min, max)) { AlignSelectedPlanetsY(); return; }
+        for (int idx = 1; idx < sel.Count - 1; idx++)
+        {
+            float t = (float)idx / (sel.Count - 1);
+            float y = Mathf.Lerp(min, max, t);
+            var ap = _world.authoredPlanets[sel[idx]];
+            float r = GetRadiusForSize(ap.size);
+            float availY = Mathf.Max(0f, _world.halfExtents.y - r);
+            ap.position.y = Mathf.Clamp(y, -availY, availY);
+            _world.authoredPlanets[sel[idx]] = ap;
+        }
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+    }
+
     private void DrawPlanetsList()
     {
         if (_world.authoredPlanets == null)
             _world.authoredPlanets = new WorldDefinition.AuthoredPlanet[0];
 
-        EditorGUILayout.LabelField("Planets", EditorStyles.boldLabel);
+        var planetOverlap = ComputePlanetOverlaps();
+
+        // Section foldout
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            bool newFold = EditorGUILayout.Foldout(_foldPlanets, "Planets", true);
+            if (newFold != _foldPlanets) { _foldPlanets = newFold; EditorPrefs.SetBool(PrefFoldPlanetsKey, _foldPlanets); }
+        }
+        if (!_foldPlanets) return;
+
+        // Ensure per-item foldout array sized
+        if (_planetItemFoldouts == null || _planetItemFoldouts.Length != _world.authoredPlanets.Length)
+        {
+            _planetItemFoldouts = new bool[_world.authoredPlanets.Length];
+            for (int i = 0; i < _planetItemFoldouts.Length; i++) _planetItemFoldouts[i] = true;
+        }
+
+        // Ensure foldout arrays are sized and default to expanded
+        var sizeValues = (PlanetSize[])System.Enum.GetValues(typeof(PlanetSize));
+        var typeValues = (PlanetType[])System.Enum.GetValues(typeof(PlanetType));
+        if (_sizeFoldouts == null || _sizeFoldouts.Length != sizeValues.Length)
+        {
+            _sizeFoldouts = new bool[sizeValues.Length];
+            for (int i = 0; i < _sizeFoldouts.Length; i++) _sizeFoldouts[i] = true;
+        }
+        if (_typeFoldouts == null || _typeFoldouts.Length != typeValues.Length)
+        {
+            _typeFoldouts = new bool[typeValues.Length];
+            for (int i = 0; i < _typeFoldouts.Length; i++) _typeFoldouts[i] = true;
+        }
+
+        // Grouping selector
+        using (new EditorGUILayout.VerticalScope("box"))
+        {
+            var prevGroup = _groupBy;
+            _groupBy = (PlanetGroupBy)EditorGUILayout.EnumPopup("Group By", _groupBy);
+            if (_groupBy != prevGroup) EditorPrefs.SetInt(PrefGroupByKey, (int)_groupBy);
+        }
 
         // Filter bar
         using (new EditorGUILayout.HorizontalScope())
@@ -575,10 +1015,25 @@ public class WorldDesignerWindow : EditorWindow
             int total = _world.authoredPlanets.Length;
             _selPlanets.RemoveAll(i => i < 0 || i >= total);
             EditorGUILayout.LabelField($"Selected: {_selPlanets.Count}", GUILayout.Width(100));
+            if (GUILayout.Button("Expand All", GUILayout.Width(90))) { SetAllPlanetFoldouts(true); }
+            if (GUILayout.Button("Collapse All", GUILayout.Width(100))) { SetAllPlanetFoldouts(false); }
             if (GUILayout.Button("All", GUILayout.Width(40)))
+            {
                 _selPlanets = Enumerable.Range(0, total).ToList();
+                SavePlanetSelection();
+            }
             if (GUILayout.Button("None", GUILayout.Width(50)))
+            {
                 _selPlanets.Clear();
+                SavePlanetSelection();
+            }
+            using (new EditorGUI.DisabledScope(_selPlanets.Count < 2))
+            {
+                if (GUILayout.Button("Align X", GUILayout.Width(80))) AlignSelectedPlanetsX();
+                if (GUILayout.Button("Align Y", GUILayout.Width(80))) AlignSelectedPlanetsY();
+                if (GUILayout.Button("Distribute X", GUILayout.Width(100))) DistributeSelectedPlanetsX();
+                if (GUILayout.Button("Distribute Y", GUILayout.Width(100))) DistributeSelectedPlanetsY();
+            }
             GUILayout.FlexibleSpace();
             using (new EditorGUI.DisabledScope(_selPlanets.Count == 0))
             {
@@ -591,71 +1046,135 @@ public class WorldDesignerWindow : EditorWindow
 
         int removeAt = -1;
         int duplicateAt = -1;
-        for (int i = 0; i < _world.authoredPlanets.Length; i++)
+        // Draw rows grouped by selection
+        System.Action<int> DrawPlanetRow = (idx) =>
         {
-            var ap = _world.authoredPlanets[i];
-            if (_filterBySize && ap.size != _filterSize) continue;
-            if (_filterByType && ap.type != _filterType) continue;
+            var ap = _world.authoredPlanets[idx];
             EditorGUILayout.BeginVertical("box");
-
             using (new EditorGUILayout.HorizontalScope())
             {
-                bool sel = _selPlanets.Contains(i);
+                bool open = (idx < _planetItemFoldouts.Length) ? _planetItemFoldouts[idx] : true;
+                string arrow = open ? "▼" : "▶";
+                if (GUILayout.Button(arrow, GUILayout.Width(18)))
+                {
+                    if (idx < _planetItemFoldouts.Length)
+                    {
+                        _planetItemFoldouts[idx] = !open;
+                        SaveItemFoldoutsPlanets();
+                    }
+                    open = !open;
+                }
+                bool sel = _selPlanets.Contains(idx);
                 bool selNew = GUILayout.Toggle(sel, GUIContent.none, GUILayout.Width(18));
                 if (selNew != sel)
                 {
-                    if (selNew) _selPlanets.Add(i); else _selPlanets.Remove(i);
+                    if (selNew) _selPlanets.Add(idx); else _selPlanets.Remove(idx);
+                    SavePlanetSelection();
                 }
-                EditorGUILayout.LabelField($"#{i}", GUILayout.Width(28));
+                EditorGUILayout.LabelField($"#{idx}", GUILayout.Width(28));
                 ap.position = EditorGUILayout.Vector2Field("Position", ap.position);
-                // quick badge: show size/type compactly
                 string badge = $"{ap.size}/{ap.type}";
                 GUILayout.Label(badge, EditorStyles.miniLabel, GUILayout.Width(120));
+                DrawPlanetBadges(idx, ap, planetOverlap);
                 if (GUILayout.Button("◉", GUILayout.Width(24))) FocusSceneOn(ap.position);
-                if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = i;
-                if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = i;
+                if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = idx;
+                if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = idx;
             }
-
-            ap.size  = (PlanetSize)EditorGUILayout.EnumPopup("Size", ap.size);
-            ap.type  = (PlanetType)EditorGUILayout.EnumPopup("Type", ap.type);
-
-            // Quick size presets
-            using (new EditorGUILayout.HorizontalScope())
+            if (idx < _planetItemFoldouts.Length && _planetItemFoldouts[idx])
             {
-                GUILayout.Label("Size Presets", GUILayout.Width(85));
-                if (GUILayout.Button("+Small", EditorStyles.miniButton, GUILayout.Width(60))) ap.size = PlanetSize.Small;
-                if (GUILayout.Button("+Medium", EditorStyles.miniButton, GUILayout.Width(70))) ap.size = PlanetSize.Medium;
-                if (GUILayout.Button("+Large", EditorStyles.miniButton, GUILayout.Width(60))) ap.size = PlanetSize.Large;
-            }
-
-            // Quick type swatches
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                GUILayout.Label("Type", GUILayout.Width(85));
-                var types = new PlanetType[] { PlanetType.Default, PlanetType.Fire, PlanetType.Water, PlanetType.Earth };
-                foreach (var t in types)
+                ap.size  = (PlanetSize)EditorGUILayout.EnumPopup("Size", ap.size);
+                ap.type  = (PlanetType)EditorGUILayout.EnumPopup("Type", ap.type);
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    var prevBg = GUI.backgroundColor;
-                    var col = TypeColor(t); col.a = 1f;
-                    GUI.backgroundColor = col;
-                    string label = t.ToString();
-                    if (GUILayout.Button(label, EditorStyles.miniButton, GUILayout.Width(64)))
+                    GUILayout.Label("Size Presets", GUILayout.Width(85));
+                    if (GUILayout.Button("+Small", EditorStyles.miniButton, GUILayout.Width(60))) ap.size = PlanetSize.Small;
+                    if (GUILayout.Button("+Medium", EditorStyles.miniButton, GUILayout.Width(70))) ap.size = PlanetSize.Medium;
+                    if (GUILayout.Button("+Large", EditorStyles.miniButton, GUILayout.Width(60))) ap.size = PlanetSize.Large;
+                }
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    GUILayout.Label("Type", GUILayout.Width(85));
+                    var types = new PlanetType[] { PlanetType.Default, PlanetType.Fire, PlanetType.Water, PlanetType.Earth };
+                    foreach (var t in types)
                     {
-                        ap.type = t;
+                        var prevBg = GUI.backgroundColor;
+                        var col = TypeColor(t); col.a = 1f;
+                        GUI.backgroundColor = col;
+                        string label = t.ToString();
+                        if (GUILayout.Button(label, EditorStyles.miniButton, GUILayout.Width(64))) ap.type = t;
+                        GUI.backgroundColor = prevBg;
                     }
-                    GUI.backgroundColor = prevBg;
+                }
+                ap.mass  = EditorGUILayout.FloatField(new GUIContent("Mass", "Independent mass per planet; gravity ignores 0."), ap.mass);
+                ap.profile = (PlanetProfile)EditorGUILayout.ObjectField("Profile (optional)", ap.profile, typeof(PlanetProfile), false);
+                float radius = GetRadiusForSize(ap.size);
+                using (new EditorGUI.DisabledScope(true)) EditorGUILayout.FloatField("Radius (from prefab)", radius);
+            }
+            _world.authoredPlanets[idx] = ap;
+            EditorGUILayout.EndVertical();
+        };
+
+        if (_groupBy == PlanetGroupBy.None)
+        {
+            for (int i = 0; i < _world.authoredPlanets.Length; i++)
+            {
+                var ap = _world.authoredPlanets[i];
+                if (_filterBySize && ap.size != _filterSize) continue;
+                if (_filterByType && ap.type != _filterType) continue;
+                DrawPlanetRow(i);
+            }
+        }
+        else if (_groupBy == PlanetGroupBy.Size)
+        {
+            var sizeValuesLocal = (PlanetSize[])System.Enum.GetValues(typeof(PlanetSize));
+            for (int gi = 0; gi < sizeValuesLocal.Length; gi++)
+            {
+                int count = 0;
+                for (int i = 0; i < _world.authoredPlanets.Length; i++)
+                {
+                    var ap = _world.authoredPlanets[i];
+                    if (ap.size != sizeValuesLocal[gi]) continue;
+                    if (_filterBySize && ap.size != _filterSize) continue;
+                    if (_filterByType && ap.type != _filterType) continue;
+                    count++;
+                }
+                _sizeFoldouts[gi] = EditorGUILayout.Foldout(_sizeFoldouts[gi], $"Size: {sizeValuesLocal[gi]} ({count})");
+                if (!_sizeFoldouts[gi]) continue;
+                for (int i = 0; i < _world.authoredPlanets.Length; i++)
+                {
+                    var ap = _world.authoredPlanets[i];
+                    if (ap.size != sizeValuesLocal[gi]) continue;
+                    if (_filterBySize && ap.size != _filterSize) continue;
+                    if (_filterByType && ap.type != _filterType) continue;
+                    DrawPlanetRow(i);
                 }
             }
-            ap.mass  = EditorGUILayout.FloatField(new GUIContent("Mass", "Independent mass per planet; gravity ignores 0."), ap.mass);
-            ap.profile = (PlanetProfile)EditorGUILayout.ObjectField("Profile (optional)", ap.profile, typeof(PlanetProfile), false);
-
-            // Read radius from prefab library for this size and show it read-only
-            float radius = GetRadiusForSize(ap.size);
-            using (new EditorGUI.DisabledScope(true))
-                EditorGUILayout.FloatField("Radius (from prefab)", radius);
-
-            _world.authoredPlanets[i] = ap;
-            EditorGUILayout.EndVertical();
+        }
+        else if (_groupBy == PlanetGroupBy.Type)
+        {
+            var typeValuesLocal = (PlanetType[])System.Enum.GetValues(typeof(PlanetType));
+            for (int gi = 0; gi < typeValuesLocal.Length; gi++)
+            {
+                int count = 0;
+                for (int i = 0; i < _world.authoredPlanets.Length; i++)
+                {
+                    var ap = _world.authoredPlanets[i];
+                    if (ap.type != typeValuesLocal[gi]) continue;
+                    if (_filterBySize && ap.size != _filterSize) continue;
+                    if (_filterByType && ap.type != _filterType) continue;
+                    count++;
+                }
+                _typeFoldouts[gi] = EditorGUILayout.Foldout(_typeFoldouts[gi], $"Type: {typeValuesLocal[gi]} ({count})");
+                if (!_typeFoldouts[gi]) continue;
+                for (int i = 0; i < _world.authoredPlanets.Length; i++)
+                {
+                    var ap = _world.authoredPlanets[i];
+                    if (ap.type != typeValuesLocal[gi]) continue;
+                    if (_filterBySize && ap.size != _filterSize) continue;
+                    if (_filterByType && ap.type != _filterType) continue;
+                    DrawPlanetRow(i);
+                }
+            }
         }
 
         if (duplicateAt >= 0)
@@ -672,6 +1191,13 @@ public class WorldDesignerWindow : EditorWindow
             dup.position.y = Mathf.Clamp(dup.position.y, -_world.halfExtents.y, _world.halfExtents.y);
             list.Insert(duplicateAt + 1, dup);
             _world.authoredPlanets = list.ToArray();
+            if (_planetItemFoldouts != null && _planetItemFoldouts.Length >= duplicateAt + 1)
+            {
+                var f = _planetItemFoldouts.ToList();
+                f.Insert(duplicateAt + 1, true);
+                _planetItemFoldouts = f.ToArray();
+                SaveItemFoldoutsPlanets();
+            }
             EditorUtility.SetDirty(_world);
             if (_livePreview) PreviewWorld();
         }
@@ -680,6 +1206,11 @@ public class WorldDesignerWindow : EditorWindow
         {
             Undo.RecordObject(_world, "Remove Planet");
             _world.authoredPlanets = _world.authoredPlanets.Where((_, idx) => idx != removeAt).ToArray();
+            if (_planetItemFoldouts != null && _planetItemFoldouts.Length > removeAt)
+            {
+                _planetItemFoldouts = _planetItemFoldouts.Where((_, idx) => idx != removeAt).ToArray();
+                SaveItemFoldoutsPlanets();
+            }
             EditorUtility.SetDirty(_world);
             if (_livePreview) PreviewWorld();
         }
@@ -707,6 +1238,9 @@ public class WorldDesignerWindow : EditorWindow
             profile = null
         });
         _world.authoredPlanets = list.ToArray();
+        // Expand foldouts for new item and save
+        _planetItemFoldouts = (_planetItemFoldouts ?? new bool[0]).Concat(new[] { true }).ToArray();
+        SaveItemFoldoutsPlanets();
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
@@ -731,7 +1265,7 @@ public class WorldDesignerWindow : EditorWindow
         // Scene overlay: small toolbar for grid, snap size, and bounds toggle
         Handles.BeginGUI();
         {
-            var r = new Rect(12, 12, 250, 64);
+            var r = new Rect(12, 12, 280, 118);
             GUILayout.BeginArea(r, GUIContent.none, GUI.skin.box);
             GUILayout.Label("World Designer");
             using (new EditorGUILayout.HorizontalScope())
@@ -800,6 +1334,22 @@ public class WorldDesignerWindow : EditorWindow
                     }
                 }
             }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                bool prevAlign = _alignSnapEnabled;
+                float prevThresh = _alignSnapThreshold;
+                _alignSnapEnabled = GUILayout.Toggle(_alignSnapEnabled, new GUIContent("Align", "Enable alignment snapping to X/Y of nearby items"), GUILayout.Width(64));
+                GUILayout.Label("Thresh", GUILayout.Width(48));
+                string tStr = GUILayout.TextField(_alignSnapThreshold.ToString("0.###"), GUILayout.Width(52));
+                if (float.TryParse(tStr, out float tParsed))
+                    _alignSnapThreshold = Mathf.Max(0.001f, tParsed);
+                if (_alignSnapEnabled != prevAlign) EditorPrefs.SetBool(PrefAlignEnabledKey, _alignSnapEnabled);
+                if (!Mathf.Approximately(_alignSnapThreshold, prevThresh)) EditorPrefs.SetFloat(PrefAlignThresholdKey, Mathf.Max(0.001f, _alignSnapThreshold));
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("Modifiers: Shift=Align • Alt=NoAlign • Ctrl/Cmd=Constrain Axis", EditorStyles.miniLabel);
+            }
             GUILayout.EndArea();
         }
         Handles.EndGUI();
@@ -859,6 +1409,9 @@ public class WorldDesignerWindow : EditorWindow
             }
         }
 
+        // Scene validation guides: overlaps and out-of-bounds hints
+        DrawSceneValidationGuides();
+
         // Posts: influence ring + position handle
         if (_world.authoredPosts != null)
         {
@@ -876,11 +1429,34 @@ public class WorldDesignerWindow : EditorWindow
                 // Position handle (2D) with optional snapping and bounds clamp
                 EditorGUI.BeginChangeCheck();
                 Vector3 p3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
-                if (_snapEnabled)
+                // Modifiers
+                var evt = Event.current;
+                bool axisConstrain = evt != null && (evt.control || evt.command);
+                bool gridActive = _snapEnabled; // could add Alt to disable if desired
+                bool alignActive = _alignSnapEnabled;
+                if (evt != null)
+                {
+                    if (evt.shift) alignActive = true;
+                    if (evt.alt) alignActive = false;
+                }
+                if (gridActive)
                 {
                     float s = Mathf.Max(0.01f, _snapSize);
                     p3.x = Mathf.Round(p3.x / s) * s;
                     p3.y = Mathf.Round(p3.y / s) * s;
+                }
+                // Axis constrain (lock axis by dominant delta)
+                if (axisConstrain)
+                {
+                    Vector2 d = (Vector2)p3 - ap.position;
+                    if (Mathf.Abs(d.x) >= Mathf.Abs(d.y)) p3.y = ap.position.y; else p3.x = ap.position.x;
+                }
+                // Alignment snap (to other posts' X/Y and world axes) + draw guides
+                if (alignActive)
+                {
+                    float guideX, guideY;
+                    ApplyAlignSnapPosts(i, ref p3, out guideX, out guideY);
+                    DrawAlignGuides(guideX, guideY);
                 }
                 float hxP = _world.halfExtents.x;
                 float hyP = _world.halfExtents.y;
@@ -924,11 +1500,33 @@ public class WorldDesignerWindow : EditorWindow
             EditorGUI.BeginChangeCheck();
             Vector3 pos3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
             // Optional snap to grid
-            if (_snapEnabled)
+            var evtP = Event.current;
+            bool axisConstrainP = evtP != null && (evtP.control || evtP.command);
+            bool gridActiveP = _snapEnabled;
+            bool alignActiveP = _alignSnapEnabled;
+            if (evtP != null)
+            {
+                if (evtP.shift) alignActiveP = true;
+                if (evtP.alt) alignActiveP = false;
+            }
+            if (gridActiveP)
             {
                 float s = Mathf.Max(0.01f, _snapSize);
                 pos3.x = Mathf.Round(pos3.x / s) * s;
                 pos3.y = Mathf.Round(pos3.y / s) * s;
+            }
+            // Axis constrain
+            if (axisConstrainP)
+            {
+                Vector2 d = (Vector2)pos3 - ap.position;
+                if (Mathf.Abs(d.x) >= Mathf.Abs(d.y)) pos3.y = ap.position.y; else pos3.x = ap.position.x;
+            }
+            // Alignment snap (to other planets' X/Y and world axes) + draw guides
+            if (alignActiveP)
+            {
+                float guideX, guideY;
+                ApplyAlignSnapPlanets(i, ref pos3, out guideX, out guideY);
+                DrawAlignGuides(guideX, guideY);
             }
             // Clamp to world bounds accounting for planet radius (keep whole disc inside)
             var hxB = _world.halfExtents.x;
@@ -1091,6 +1689,158 @@ public class WorldDesignerWindow : EditorWindow
         Undo.DestroyObjectImmediate(root);
     }
 
+    // --- Persisted foldout helpers ---
+    private string GetWorldKeySuffix()
+    {
+        if (!_world) return "(no_world)";
+        string path = AssetDatabase.GetAssetPath(_world);
+        string guid = string.IsNullOrEmpty(path) ? string.Empty : AssetDatabase.AssetPathToGUID(path);
+        if (!string.IsNullOrEmpty(guid)) return guid;
+        return _world.name;
+    }
+
+    private void TryLoadItemFoldouts()
+    {
+        LoadItemFoldoutsPosts();
+        LoadItemFoldoutsPlanets();
+    }
+
+    private void TryLoadSelections()
+    {
+        LoadPostSelection();
+        LoadPlanetSelection();
+    }
+
+    private void LoadItemFoldoutsPosts()
+    {
+        if (_world == null) return;
+        string key = $"WorldDesigner_PostFoldouts_{GetWorldKeySuffix()}";
+        string data = EditorPrefs.GetString(key, string.Empty);
+        if (string.IsNullOrEmpty(data)) return;
+        int n = _world.authoredPosts != null ? _world.authoredPosts.Length : 0;
+        if (n <= 0) return;
+        if (_postItemFoldouts == null || _postItemFoldouts.Length != n)
+            _postItemFoldouts = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            _postItemFoldouts[i] = (i < data.Length) ? (data[i] == '1') : true;
+        }
+    }
+
+    private void SaveItemFoldoutsPosts()
+    {
+        if (_world == null || _postItemFoldouts == null) return;
+        var sb = new StringBuilder(_postItemFoldouts.Length);
+        for (int i = 0; i < _postItemFoldouts.Length; i++) sb.Append(_postItemFoldouts[i] ? '1' : '0');
+        string key = $"WorldDesigner_PostFoldouts_{GetWorldKeySuffix()}";
+        EditorPrefs.SetString(key, sb.ToString());
+    }
+
+    private void LoadItemFoldoutsPlanets()
+    {
+        if (_world == null) return;
+        string key = $"WorldDesigner_PlanetFoldouts_{GetWorldKeySuffix()}";
+        string data = EditorPrefs.GetString(key, string.Empty);
+        if (string.IsNullOrEmpty(data)) return;
+        int n = _world.authoredPlanets != null ? _world.authoredPlanets.Length : 0;
+        if (n <= 0) return;
+        if (_planetItemFoldouts == null || _planetItemFoldouts.Length != n)
+            _planetItemFoldouts = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            _planetItemFoldouts[i] = (i < data.Length) ? (data[i] == '1') : true;
+        }
+    }
+
+    private void SaveItemFoldoutsPlanets()
+    {
+        if (_world == null || _planetItemFoldouts == null) return;
+        var sb = new StringBuilder(_planetItemFoldouts.Length);
+        for (int i = 0; i < _planetItemFoldouts.Length; i++) sb.Append(_planetItemFoldouts[i] ? '1' : '0');
+        string key = $"WorldDesigner_PlanetFoldouts_{GetWorldKeySuffix()}";
+        EditorPrefs.SetString(key, sb.ToString());
+    }
+
+    private void SaveItemFoldouts()
+    {
+        SaveItemFoldoutsPosts();
+        SaveItemFoldoutsPlanets();
+    }
+
+    private void SaveSelections()
+    {
+        SavePostSelection();
+        SavePlanetSelection();
+    }
+
+    private void LoadPostSelection()
+    {
+        _selPosts.Clear();
+        if (_world == null) return;
+        string key = $"{PrefPostSelectionKey}_{GetWorldKeySuffix()}";
+        string data = EditorPrefs.GetString(key, string.Empty);
+        if (string.IsNullOrEmpty(data)) return;
+        var parts = data.Split(',');
+        int count = _world.authoredPosts != null ? _world.authoredPosts.Length : 0;
+        foreach (var p in parts)
+        {
+            if (int.TryParse(p, out int idx) && idx >= 0 && idx < count)
+                _selPosts.Add(idx);
+        }
+    }
+
+    private void SavePostSelection()
+    {
+        if (_world == null) return;
+        string key = $"{PrefPostSelectionKey}_{GetWorldKeySuffix()}";
+        var uniq = _selPosts.Distinct().OrderBy(i => i);
+        string data = string.Join(",", uniq);
+        EditorPrefs.SetString(key, data);
+    }
+
+    private void LoadPlanetSelection()
+    {
+        _selPlanets.Clear();
+        if (_world == null) return;
+        string key = $"{PrefPlanetSelectionKey}_{GetWorldKeySuffix()}";
+        string data = EditorPrefs.GetString(key, string.Empty);
+        if (string.IsNullOrEmpty(data)) return;
+        var parts = data.Split(',');
+        int count = _world.authoredPlanets != null ? _world.authoredPlanets.Length : 0;
+        foreach (var p in parts)
+        {
+            if (int.TryParse(p, out int idx) && idx >= 0 && idx < count)
+                _selPlanets.Add(idx);
+        }
+    }
+
+    private void SavePlanetSelection()
+    {
+        if (_world == null) return;
+        string key = $"{PrefPlanetSelectionKey}_{GetWorldKeySuffix()}";
+        var uniq = _selPlanets.Distinct().OrderBy(i => i);
+        string data = string.Join(",", uniq);
+        EditorPrefs.SetString(key, data);
+    }
+
+    private void SetAllPostFoldouts(bool open)
+    {
+        if (_world == null) return;
+        int n = _world.authoredPosts != null ? _world.authoredPosts.Length : 0;
+        if (_postItemFoldouts == null || _postItemFoldouts.Length != n) _postItemFoldouts = new bool[n];
+        for (int i = 0; i < n; i++) _postItemFoldouts[i] = open;
+        SaveItemFoldoutsPosts();
+    }
+
+    private void SetAllPlanetFoldouts(bool open)
+    {
+        if (_world == null) return;
+        int n = _world.authoredPlanets != null ? _world.authoredPlanets.Length : 0;
+        if (_planetItemFoldouts == null || _planetItemFoldouts.Length != n) _planetItemFoldouts = new bool[n];
+        for (int i = 0; i < n; i++) _planetItemFoldouts[i] = open;
+        SaveItemFoldoutsPlanets();
+    }
+
     private void FocusSceneOn(Vector2 position)
     {
         // Ping the world asset for quick locate
@@ -1118,6 +1868,271 @@ public class WorldDesignerWindow : EditorWindow
         sv.pivot = Vector3.zero;
         sv.size = maxExtent + 2f;
         sv.Repaint();
+    }
+
+    // --- Alignment snap helpers ---
+    private void ApplyAlignSnapPosts(int movingIndex, ref Vector3 pos, out float guideX, out float guideY)
+    {
+        guideX = float.NaN; guideY = float.NaN;
+        if (_world == null || _world.authoredPosts == null) return;
+        float bestDx = _alignSnapThreshold + 1f;
+        float bestDy = _alignSnapThreshold + 1f;
+        // Candidates: world axes
+        float[] xCands = new float[] { 0f };
+        float[] yCands = new float[] { 0f };
+        // From other posts
+        for (int i = 0; i < _world.authoredPosts.Length; i++)
+        {
+            if (i == movingIndex) continue;
+            var p = _world.authoredPosts[i].position;
+            CheckAlignCandidate(pos.x, p.x, ref bestDx, ref guideX);
+            CheckAlignCandidate(pos.y, p.y, ref bestDy, ref guideY);
+        }
+        // World axes
+        CheckAlignCandidate(pos.x, 0f, ref bestDx, ref guideX);
+        CheckAlignCandidate(pos.y, 0f, ref bestDy, ref guideY);
+
+        if (!float.IsNaN(guideX) && Mathf.Abs(pos.x - guideX) <= _alignSnapThreshold) pos.x = guideX;
+        if (!float.IsNaN(guideY) && Mathf.Abs(pos.y - guideY) <= _alignSnapThreshold) pos.y = guideY;
+    }
+
+    private void ApplyAlignSnapPlanets(int movingIndex, ref Vector3 pos, out float guideX, out float guideY)
+    {
+        guideX = float.NaN; guideY = float.NaN;
+        if (_world == null || _world.authoredPlanets == null) return;
+        float bestDx = _alignSnapThreshold + 1f;
+        float bestDy = _alignSnapThreshold + 1f;
+        for (int i = 0; i < _world.authoredPlanets.Length; i++)
+        {
+            if (i == movingIndex) continue;
+            var p = _world.authoredPlanets[i].position;
+            CheckAlignCandidate(pos.x, p.x, ref bestDx, ref guideX);
+            CheckAlignCandidate(pos.y, p.y, ref bestDy, ref guideY);
+        }
+        // World axes
+        CheckAlignCandidate(pos.x, 0f, ref bestDx, ref guideX);
+        CheckAlignCandidate(pos.y, 0f, ref bestDy, ref guideY);
+
+        if (!float.IsNaN(guideX) && Mathf.Abs(pos.x - guideX) <= _alignSnapThreshold) pos.x = guideX;
+        if (!float.IsNaN(guideY) && Mathf.Abs(pos.y - guideY) <= _alignSnapThreshold) pos.y = guideY;
+    }
+
+    private void CheckAlignCandidate(float current, float candidate, ref float bestD, ref float guide)
+    {
+        float d = Mathf.Abs(current - candidate);
+        if (d <= _alignSnapThreshold && d < bestD)
+        {
+            bestD = d;
+            guide = candidate;
+        }
+    }
+
+    private void DrawAlignGuides(float guideX, float guideY)
+    {
+        float hx = _world.halfExtents.x;
+        float hy = _world.halfExtents.y;
+        if (!float.IsNaN(guideX))
+        {
+            Handles.color = new Color(1f, 0.2f, 0.8f, 0.8f);
+            Handles.DrawLine(new Vector3(guideX, -hy, 0f), new Vector3(guideX, hy, 0f));
+        }
+        if (!float.IsNaN(guideY))
+        {
+            Handles.color = new Color(1f, 0.8f, 0.2f, 0.8f);
+            Handles.DrawLine(new Vector3(-hx, guideY, 0f), new Vector3(hx, guideY, 0f));
+        }
+    }
+
+    // --- Validation helpers ---
+    private void DrawSceneValidationGuides()
+    {
+        if (_world == null) return;
+        // Posts: overlaps and out-of-bounds
+        if (_world.authoredPosts != null && _world.authoredPosts.Length > 0)
+        {
+            var postPairs = ComputePostOverlapPairs();
+            Handles.color = new Color(1f, 0.3f, 0.3f, 0.85f);
+            foreach (var pr in postPairs)
+            {
+                var a = _world.authoredPosts[pr.Item1].position;
+                var b = _world.authoredPosts[pr.Item2].position;
+                Handles.DrawLine(a, b);
+            }
+            float r = Mathf.Max(0f, GetPostPrefabRadius());
+            for (int i = 0; i < _world.authoredPosts.Length; i++)
+            {
+                var ap = _world.authoredPosts[i];
+                if (PostOutsideBounds(ap))
+                {
+                    // draw boundary ring at post radius (fallback small disc if unknown)
+                    float rr = r > 0f ? r : 0.25f;
+                    Handles.color = new Color(1f, 0.2f, 0.2f, 0.9f);
+                    Handles.DrawWireDisc(ap.position, Vector3.forward, rr);
+                }
+            }
+        }
+
+        // Planets: overlaps and out-of-bounds
+        if (_world.authoredPlanets != null && _world.authoredPlanets.Length > 0)
+        {
+            var planetPairs = ComputePlanetOverlapPairs();
+            Handles.color = new Color(1f, 0.3f, 0.3f, 0.85f);
+            foreach (var pr in planetPairs)
+            {
+                var a = _world.authoredPlanets[pr.Item1].position;
+                var b = _world.authoredPlanets[pr.Item2].position;
+                Handles.DrawLine(a, b);
+            }
+            for (int i = 0; i < _world.authoredPlanets.Length; i++)
+            {
+                var ap = _world.authoredPlanets[i];
+                if (PlanetOutsideBounds(ap))
+                {
+                    float r = GetRadiusForSize(ap.size);
+                    Handles.color = new Color(1f, 0.2f, 0.2f, 0.9f);
+                    Handles.DrawWireDisc(ap.position, Vector3.forward, r);
+                }
+            }
+        }
+    }
+
+    private float GetPostPrefabRadius()
+    {
+        if (_world == null || !_world.postPrefab) return 0f;
+        var prefab = _world.postPrefab;
+        var col = prefab.GetComponent<CircleCollider2D>();
+        if (col) return Mathf.Max(0f, col.radius * Mathf.Max(prefab.transform.lossyScale.x, prefab.transform.lossyScale.y));
+        var node = prefab.GetComponent<DeliveryNode>();
+        if (node) return Mathf.Max(0f, node.radius * Mathf.Max(prefab.transform.lossyScale.x, prefab.transform.lossyScale.y));
+        return 0f;
+    }
+
+    private System.Collections.Generic.HashSet<int> ComputePlanetOverlaps()
+    {
+        var set = new System.Collections.Generic.HashSet<int>();
+        if (_world == null || _world.authoredPlanets == null) return set;
+        for (int i = 0; i < _world.authoredPlanets.Length; i++)
+        {
+            var a = _world.authoredPlanets[i];
+            float ra = GetRadiusForSize(a.size);
+            for (int j = i + 1; j < _world.authoredPlanets.Length; j++)
+            {
+                var b = _world.authoredPlanets[j];
+                float rb = GetRadiusForSize(b.size);
+                float sum = ra + rb;
+                if (Vector2.SqrMagnitude(a.position - b.position) < sum * sum)
+                {
+                    set.Add(i); set.Add(j);
+                }
+            }
+        }
+        return set;
+    }
+
+    private System.Collections.Generic.List<System.Tuple<int,int>> ComputePlanetOverlapPairs()
+    {
+        var list = new System.Collections.Generic.List<System.Tuple<int,int>>();
+        if (_world == null || _world.authoredPlanets == null) return list;
+        for (int i = 0; i < _world.authoredPlanets.Length; i++)
+        {
+            var a = _world.authoredPlanets[i];
+            float ra = GetRadiusForSize(a.size);
+            for (int j = i + 1; j < _world.authoredPlanets.Length; j++)
+            {
+                var b = _world.authoredPlanets[j];
+                float rb = GetRadiusForSize(b.size);
+                float sum = ra + rb;
+                if (Vector2.SqrMagnitude(a.position - b.position) < sum * sum)
+                    list.Add(System.Tuple.Create(i, j));
+            }
+        }
+        return list;
+    }
+
+    private System.Collections.Generic.HashSet<int> ComputePostOverlaps()
+    {
+        var set = new System.Collections.Generic.HashSet<int>();
+        if (_world == null || _world.authoredPosts == null) return set;
+        float r = GetPostPrefabRadius();
+        if (r <= 0f) return set; // cannot infer without a radius
+        for (int i = 0; i < _world.authoredPosts.Length; i++)
+        {
+            var a = _world.authoredPosts[i];
+            for (int j = i + 1; j < _world.authoredPosts.Length; j++)
+            {
+                var b = _world.authoredPosts[j];
+                float sum = r + r;
+                if (Vector2.SqrMagnitude(a.position - b.position) < sum * sum)
+                {
+                    set.Add(i); set.Add(j);
+                }
+            }
+        }
+        return set;
+    }
+
+    private System.Collections.Generic.List<System.Tuple<int,int>> ComputePostOverlapPairs()
+    {
+        var list = new System.Collections.Generic.List<System.Tuple<int,int>>();
+        if (_world == null || _world.authoredPosts == null) return list;
+        float r = GetPostPrefabRadius();
+        if (r <= 0f) return list;
+        for (int i = 0; i < _world.authoredPosts.Length; i++)
+        {
+            var a = _world.authoredPosts[i];
+            for (int j = i + 1; j < _world.authoredPosts.Length; j++)
+            {
+                var b = _world.authoredPosts[j];
+                float sum = r + r;
+                if (Vector2.SqrMagnitude(a.position - b.position) < sum * sum)
+                    list.Add(System.Tuple.Create(i, j));
+            }
+        }
+        return list;
+    }
+
+    private bool PlanetOutsideBounds(WorldDefinition.AuthoredPlanet ap)
+    {
+        float r = GetRadiusForSize(ap.size);
+        float availX = Mathf.Max(0f, _world.halfExtents.x - r);
+        float availY = Mathf.Max(0f, _world.halfExtents.y - r);
+        return Mathf.Abs(ap.position.x) > availX || Mathf.Abs(ap.position.y) > availY;
+    }
+
+    private bool PostOutsideBounds(WorldDefinition.AuthoredPost ap)
+    {
+        float r = GetPostPrefabRadius();
+        float availX = Mathf.Max(0f, _world.halfExtents.x - r);
+        float availY = Mathf.Max(0f, _world.halfExtents.y - r);
+        return Mathf.Abs(ap.position.x) > availX || Mathf.Abs(ap.position.y) > availY;
+    }
+
+    private void DrawBadge(string text, Color bg, float width = 64f)
+    {
+        var prev = GUI.backgroundColor;
+        GUI.backgroundColor = bg;
+        GUILayout.Label(text, EditorStyles.miniButton, GUILayout.Width(width));
+        GUI.backgroundColor = prev;
+    }
+
+    private void DrawPlanetBadges(int index, WorldDefinition.AuthoredPlanet ap, System.Collections.Generic.HashSet<int> overlaps)
+    {
+        // Missing prefab
+        bool missingPrefab = (_world.planetPrefabs == null) || !_world.planetPrefabs.TryGet(ap.size, out var _);
+        if (missingPrefab) DrawBadge("Prefab?", new Color(1f, 0.5f, 0.9f, 0.9f), 64f);
+        // Outside bounds
+        if (PlanetOutsideBounds(ap)) DrawBadge("Out of Bounds", new Color(1f, 0.4f, 0.3f, 0.9f), 96f);
+        // Overlap
+        if (overlaps != null && overlaps.Contains(index)) DrawBadge("Overlaps", new Color(1f, 0.75f, 0.2f, 0.9f), 72f);
+    }
+
+    private void DrawPostBadges(int index, WorldDefinition.AuthoredPost ap)
+    {
+        bool missingPrefab = (_world.postPrefab == null);
+        if (missingPrefab) DrawBadge("Prefab?", new Color(1f, 0.5f, 0.9f, 0.9f), 64f);
+        if (PostOutsideBounds(ap)) DrawBadge("Out of Bounds", new Color(1f, 0.4f, 0.3f, 0.9f), 96f);
+        var overlaps = ComputePostOverlaps();
+        if (overlaps.Contains(index)) DrawBadge("Overlaps", new Color(1f, 0.75f, 0.2f, 0.9f), 72f);
     }
 }
 #endif
