@@ -40,6 +40,25 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private bool _livePreview = false;
     [SerializeField] private bool _alignSnapEnabled = true;
     [SerializeField] private float _alignSnapThreshold = 0.25f;
+    [SerializeField] private bool _boxSelectEnabled = true;
+    [SerializeField] private bool _boxSelectPlanets = true;
+    [SerializeField] private bool _boxSelectPosts = true;
+    private bool _boxSelecting;
+    private Vector2 _boxStartGui, _boxEndGui;
+    [SerializeField] private float _nudgeStep = 1f;
+    private Rect _overlayRect;
+    [SerializeField] private bool _showPlanetInfo = true;
+    [SerializeField] private bool _showPostInfo = true;
+    [SerializeField] private bool _showInfo = true; // master toggle
+    // Group drag state
+    private bool _draggingPlanets;
+    private bool _draggingPosts;
+    private int _dragAnchorPlanetIndex = -1;
+    private int _dragAnchorPostIndex = -1;
+    private Vector2 _dragAnchorPlanetStart;
+    private Vector2 _dragAnchorPostStart;
+    private System.Collections.Generic.Dictionary<int, Vector2> _dragStartPlanets;
+    private System.Collections.Generic.Dictionary<int, Vector2> _dragStartPosts;
     [SerializeField] private bool _foldPosts = true;
     [SerializeField] private bool _foldPlanets = true;
     [SerializeField] private bool[] _postItemFoldouts;
@@ -80,6 +99,12 @@ public class WorldDesignerWindow : EditorWindow
     private const string PrefPlanetSelectionKey = "WorldDesigner_PlanetSelection";
     private const string PrefAlignEnabledKey = "WorldDesigner_AlignEnabled";
     private const string PrefAlignThresholdKey = "WorldDesigner_AlignThreshold";
+    private const string PrefBoxEnabledKey = "WorldDesigner_BoxEnabled";
+    private const string PrefBoxPlanetsKey = "WorldDesigner_BoxPlanets";
+    private const string PrefBoxPostsKey = "WorldDesigner_BoxPosts";
+    private const string PrefShowPlanetInfoKey = "WorldDesigner_ShowPlanetInfo";
+    private const string PrefShowPostInfoKey = "WorldDesigner_ShowPostInfo";
+    private const string PrefShowInfoKey = "WorldDesigner_ShowInfo";
 
     // Handle colors by type (editor-only hinting)
     private static readonly Color _typeDefault = new Color(1f, 1f, 1f, 0.8f);
@@ -126,6 +151,18 @@ public class WorldDesignerWindow : EditorWindow
             _alignSnapEnabled = EditorPrefs.GetBool(PrefAlignEnabledKey, _alignSnapEnabled);
         if (EditorPrefs.HasKey(PrefAlignThresholdKey))
             _alignSnapThreshold = Mathf.Max(0.001f, EditorPrefs.GetFloat(PrefAlignThresholdKey, _alignSnapThreshold));
+        if (EditorPrefs.HasKey(PrefBoxEnabledKey))
+            _boxSelectEnabled = EditorPrefs.GetBool(PrefBoxEnabledKey, _boxSelectEnabled);
+        if (EditorPrefs.HasKey(PrefBoxPlanetsKey))
+            _boxSelectPlanets = EditorPrefs.GetBool(PrefBoxPlanetsKey, _boxSelectPlanets);
+        if (EditorPrefs.HasKey(PrefBoxPostsKey))
+            _boxSelectPosts = EditorPrefs.GetBool(PrefBoxPostsKey, _boxSelectPosts);
+        if (EditorPrefs.HasKey(PrefShowPlanetInfoKey))
+            _showPlanetInfo = EditorPrefs.GetBool(PrefShowPlanetInfoKey, _showPlanetInfo);
+        if (EditorPrefs.HasKey(PrefShowPostInfoKey))
+            _showPostInfo = EditorPrefs.GetBool(PrefShowPostInfoKey, _showPostInfo);
+        if (EditorPrefs.HasKey(PrefShowInfoKey))
+            _showInfo = EditorPrefs.GetBool(PrefShowInfoKey, _showInfo);
 
         // Attempt to load per-item foldouts for current world (if any)
         TryLoadItemFoldouts();
@@ -148,6 +185,12 @@ public class WorldDesignerWindow : EditorWindow
         EditorPrefs.SetBool(PrefFoldPlanetsKey, _foldPlanets);
         EditorPrefs.SetBool(PrefAlignEnabledKey, _alignSnapEnabled);
         EditorPrefs.SetFloat(PrefAlignThresholdKey, Mathf.Max(0.001f, _alignSnapThreshold));
+        EditorPrefs.SetBool(PrefBoxEnabledKey, _boxSelectEnabled);
+        EditorPrefs.SetBool(PrefBoxPlanetsKey, _boxSelectPlanets);
+        EditorPrefs.SetBool(PrefBoxPostsKey, _boxSelectPosts);
+        EditorPrefs.SetBool(PrefShowPlanetInfoKey, _showPlanetInfo);
+        EditorPrefs.SetBool(PrefShowPostInfoKey, _showPostInfo);
+        EditorPrefs.SetBool(PrefShowInfoKey, _showInfo);
 
         // Save per-item foldouts for current world
         SaveItemFoldouts();
@@ -1252,11 +1295,25 @@ public class WorldDesignerWindow : EditorWindow
     {
         if (!_world || _world.authoredPlanets == null) return;
 
+        HandleBoxSelect(sv);
+        HandleClickSelection();
+        HandleKeyboardNudge();
+
+        // Reset group-drag state on mouse up
+        var e = Event.current;
+        if (e != null && e.rawType == EventType.MouseUp)
+        {
+            _draggingPlanets = false; _draggingPosts = false;
+            _dragAnchorPlanetIndex = -1; _dragAnchorPostIndex = -1;
+            _dragStartPlanets = null; _dragStartPosts = null;
+        }
+
         // Scene overlay: small toolbar for grid, snap size, and bounds toggle
         Handles.BeginGUI();
         {
-            var r = new Rect(12, 12, 280, 118);
-            GUILayout.BeginArea(r, GUIContent.none, GUI.skin.box);
+            // Expand overlay to avoid clipping and accidental deselects
+            _overlayRect = new Rect(12, 12, 420, 220);
+            GUILayout.BeginArea(_overlayRect, GUIContent.none, GUI.skin.box);
             GUILayout.Label("World Designer");
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -1338,6 +1395,56 @@ public class WorldDesignerWindow : EditorWindow
             }
             using (new EditorGUILayout.HorizontalScope())
             {
+                bool prevBox = _boxSelectEnabled;
+                bool prevBP = _boxSelectPlanets;
+                bool prevBL = _boxSelectPosts;
+                _boxSelectEnabled = GUILayout.Toggle(_boxSelectEnabled, new GUIContent("Box", "Enable box selection (Shift+Drag)"), GUILayout.Width(54));
+                _boxSelectPlanets = GUILayout.Toggle(_boxSelectPlanets, new GUIContent("Planets", "Include Planets in box select"), GUILayout.Width(72));
+                _boxSelectPosts = GUILayout.Toggle(_boxSelectPosts, new GUIContent("Posts", "Include Posts in box select"), GUILayout.Width(64));
+                if (_boxSelectEnabled != prevBox) EditorPrefs.SetBool(PrefBoxEnabledKey, _boxSelectEnabled);
+                if (_boxSelectPlanets != prevBP) EditorPrefs.SetBool(PrefBoxPlanetsKey, _boxSelectPlanets);
+                if (_boxSelectPosts != prevBL) EditorPrefs.SetBool(PrefBoxPostsKey, _boxSelectPosts);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                bool prevMaster = _showInfo;
+                _showInfo = GUILayout.Toggle(_showInfo, new GUIContent("Info", "Toggle all info bubbles"), GUILayout.Width(56));
+                if (_showInfo != prevMaster)
+                {
+                    _showPlanetInfo = _showInfo;
+                    _showPostInfo = _showInfo;
+                    EditorPrefs.SetBool(PrefShowPlanetInfoKey, _showPlanetInfo);
+                    EditorPrefs.SetBool(PrefShowPostInfoKey, _showPostInfo);
+                    EditorPrefs.SetBool(PrefShowInfoKey, _showInfo);
+                }
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                bool prevPI = _showPlanetInfo;
+                bool prevPoI = _showPostInfo;
+                _showPlanetInfo = GUILayout.Toggle(_showPlanetInfo, new GUIContent("Planet Info", "Show info bubbles above planets"), GUILayout.Width(100));
+                _showPostInfo = GUILayout.Toggle(_showPostInfo, new GUIContent("Post Info", "Show info bubbles above posts"), GUILayout.Width(90));
+                if (_showPlanetInfo != prevPI) EditorPrefs.SetBool(PrefShowPlanetInfoKey, _showPlanetInfo);
+                if (_showPostInfo != prevPoI) EditorPrefs.SetBool(PrefShowPostInfoKey, _showPostInfo);
+                // Keep master in sync: true only if both are true
+                _showInfo = _showPlanetInfo && _showPostInfo;
+                EditorPrefs.SetBool(PrefShowInfoKey, _showInfo);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("Move", GUILayout.Width(36));
+                string stepStr = GUILayout.TextField(_nudgeStep.ToString("0.###"), GUILayout.Width(56));
+                if (float.TryParse(stepStr, out float stepParsed)) _nudgeStep = Mathf.Max(0.001f, stepParsed);
+                using (new EditorGUI.DisabledScope((_selPlanets?.Count ?? 0) + (_selPosts?.Count ?? 0) == 0))
+                {
+                    if (GUILayout.Button("←", GUILayout.Width(28))) NudgeSelection(new Vector2(-_nudgeStep, 0f));
+                    if (GUILayout.Button("→", GUILayout.Width(28))) NudgeSelection(new Vector2(_nudgeStep, 0f));
+                    if (GUILayout.Button("↑", GUILayout.Width(28))) NudgeSelection(new Vector2(0f, _nudgeStep));
+                    if (GUILayout.Button("↓", GUILayout.Width(28))) NudgeSelection(new Vector2(0f, -_nudgeStep));
+                }
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
                 GUILayout.Label("Modifiers: Shift=Align • Alt=NoAlign • Ctrl/Cmd=Constrain Axis", EditorStyles.miniLabel);
             }
             GUILayout.EndArea();
@@ -1416,9 +1523,20 @@ public class WorldDesignerWindow : EditorWindow
                     Handles.DrawWireDisc((Vector3)ap.position, Vector3.forward, ap.influenceRadius);
                 }
 
-                // Position handle (2D) with optional snapping and bounds clamp
-                EditorGUI.BeginChangeCheck();
-                Vector3 p3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
+                // Selection highlight for posts (small ring at center)
+                bool postSelected = _selPosts != null && _selPosts.Contains(i);
+                if (postSelected)
+                {
+                    Handles.color = new Color(1f, 0.95f, 0.2f, 0.95f);
+                    float rr = Mathf.Max(0.25f, Mathf.Min(0.6f, ap.influenceRadius * 0.08f));
+                    Handles.DrawWireDisc((Vector3)ap.position, Vector3.forward, rr);
+                    Handles.DrawWireDisc((Vector3)ap.position, Vector3.forward, rr + 0.03f);
+                }
+
+            // Position handle (2D) with optional snapping and bounds clamp
+            EditorGUI.BeginChangeCheck();
+            Vector3 p3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
+            Vector2 oldPostPos = ap.position;
                 // Modifiers
                 var evt = Event.current;
                 bool axisConstrain = evt != null && (evt.control || evt.command);
@@ -1457,21 +1575,87 @@ public class WorldDesignerWindow : EditorWindow
                 if (EditorGUI.EndChangeCheck())
                 {
                     Undo.RecordObject(_world, "Move Post");
+                    // Initialize group drag if needed
+                    bool thisSelected = _selPosts != null && _selPosts.Contains(i);
+                    if (!_draggingPosts && thisSelected && _selPosts != null && _selPosts.Count > 1)
+                    {
+                        _draggingPosts = true;
+                        _dragAnchorPostIndex = i;
+                        _dragAnchorPostStart = oldPostPos;
+                        _dragStartPosts = new System.Collections.Generic.Dictionary<int, Vector2>(_selPosts.Count);
+                        for (int si = 0; si < _selPosts.Count; si++)
+                        {
+                            int idx = _selPosts[si];
+                            if (idx < 0 || idx >= _world.authoredPosts.Length) continue;
+                            _dragStartPosts[idx] = _world.authoredPosts[idx].position;
+                        }
+                        // Also snapshot selected planets so drag can move both kinds together
+                        if (_selPlanets != null && _selPlanets.Count > 0)
+                        {
+                            _dragStartPlanets = new System.Collections.Generic.Dictionary<int, Vector2>(_selPlanets.Count);
+                            for (int sp = 0; sp < _selPlanets.Count; sp++)
+                            {
+                                int pidx = _selPlanets[sp];
+                                if (pidx < 0 || pidx >= (_world.authoredPlanets?.Length ?? 0)) continue;
+                                _dragStartPlanets[pidx] = _world.authoredPlanets[pidx].position;
+                            }
+                        }
+                    }
+                    // Compute delta and apply to all selected posts for multi-drag (anchor-based)
+                    if (_draggingPosts && _dragAnchorPostIndex == i && _dragStartPosts != null)
+                    {
+                        Vector2 delta = clampedP - _dragAnchorPostStart;
+                        var keys = _dragStartPosts.Keys.ToList();
+                        for (int si = 0; si < keys.Count; si++)
+                        {
+                            int idx = keys[si];
+                            if (idx == i) continue;
+                            var startPos = _dragStartPosts[idx];
+                            var np = startPos + delta;
+                            np.x = Mathf.Clamp(np.x, -hxP, hxP);
+                            np.y = Mathf.Clamp(np.y, -hyP, hyP);
+                            var op = _world.authoredPosts[idx];
+                            op.position = np;
+                            _world.authoredPosts[idx] = op;
+                        }
+                        // Apply same delta to selected planets (radius-aware clamp)
+                        if (_dragStartPlanets != null && _world.authoredPlanets != null)
+                        {
+                            var pkeys = _dragStartPlanets.Keys.ToList();
+                            for (int pi = 0; pi < pkeys.Count; pi++)
+                            {
+                                int pidx = pkeys[pi];
+                                var startPos = _dragStartPlanets[pidx];
+                                var op = _world.authoredPlanets[pidx];
+                                float rOther = Mathf.Max(0.01f, GetRadiusForSize(op.size));
+                                float ax = Mathf.Max(0f, _world.halfExtents.x - rOther);
+                                float ay = Mathf.Max(0f, _world.halfExtents.y - rOther);
+                                var np = startPos + delta;
+                                np.x = Mathf.Clamp(np.x, -ax, ax);
+                                np.y = Mathf.Clamp(np.y, -ay, ay);
+                                op.position = np;
+                                _world.authoredPlanets[pidx] = op;
+                            }
+                        }
+                    }
                     ap.position = clampedP;
                     _world.authoredPosts[i] = ap;
                     EditorUtility.SetDirty(_world);
                     if (_livePreview) PreviewWorld();
                 }
 
-                // Label
-                Handles.BeginGUI();
-                var guiPtP = HandleUtility.WorldToGUIPoint((Vector3)ap.position + new Vector3(0, 0.4f, 0));
-                var rectP = new Rect(guiPtP.x - 80, guiPtP.y - 28, 160, 24);
-                GUI.Box(rectP, GUIContent.none);
-                GUILayout.BeginArea(rectP);
-                GUILayout.Label($"{(string.IsNullOrEmpty(ap.displayName) ? "Post" : ap.displayName)}  L{Mathf.Max(1, ap.startLevel)}", EditorStyles.miniLabel);
-                GUILayout.EndArea();
-                Handles.EndGUI();
+                // Info bubble
+                if (_showPostInfo)
+                {
+                    Handles.BeginGUI();
+                    var guiPtP = HandleUtility.WorldToGUIPoint((Vector3)ap.position + new Vector3(0, 0.4f, 0));
+                    var rectP = new Rect(guiPtP.x - 80, guiPtP.y - 28, 160, 24);
+                    GUI.Box(rectP, GUIContent.none);
+                    GUILayout.BeginArea(rectP);
+                    GUILayout.Label($"{(string.IsNullOrEmpty(ap.displayName) ? "Post" : ap.displayName)}  L{Mathf.Max(1, ap.startLevel)}", EditorStyles.miniLabel);
+                    GUILayout.EndArea();
+                    Handles.EndGUI();
+                }
             }
         }
 
@@ -1486,9 +1670,20 @@ public class WorldDesignerWindow : EditorWindow
             // Draw disc for visual radius
             Handles.DrawWireDisc((Vector3)ap.position, Vector3.forward, radius);
 
+            // Selection highlight overlay for planets
+            bool planetSelected = _selPlanets != null && _selPlanets.Contains(i);
+            if (planetSelected)
+            {
+                var hi = new Color(0.2f, 1f, 1f, 0.95f);
+                Handles.color = hi;
+                Handles.DrawWireDisc((Vector3)ap.position, Vector3.forward, radius + 0.03f);
+                Handles.DrawWireDisc((Vector3)ap.position, Vector3.forward, radius + 0.06f);
+            }
+
             // Position handle (2D)
             EditorGUI.BeginChangeCheck();
             Vector3 pos3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
+            Vector2 oldPlanetPos = ap.position;
             // Optional snap to grid
             var evtP = Event.current;
             bool axisConstrainP = evtP != null && (evtP.control || evtP.command);
@@ -1530,21 +1725,88 @@ public class WorldDesignerWindow : EditorWindow
             if (EditorGUI.EndChangeCheck())
             {
                 Undo.RecordObject(_world, "Move Planet");
+                // Initialize group drag if needed
+                bool thisSelected = _selPlanets != null && _selPlanets.Contains(i);
+                if (!_draggingPlanets && thisSelected && _selPlanets != null && _selPlanets.Count > 1)
+                {
+                    _draggingPlanets = true;
+                    _dragAnchorPlanetIndex = i;
+                    _dragAnchorPlanetStart = oldPlanetPos;
+                    _dragStartPlanets = new System.Collections.Generic.Dictionary<int, Vector2>(_selPlanets.Count);
+                    for (int si = 0; si < _selPlanets.Count; si++)
+                    {
+                        int idx = _selPlanets[si];
+                        if (idx < 0 || idx >= _world.authoredPlanets.Length) continue;
+                        _dragStartPlanets[idx] = _world.authoredPlanets[idx].position;
+                    }
+                    // Also snapshot selected posts so drag can move both kinds together
+                    if (_selPosts != null && _selPosts.Count > 0)
+                    {
+                        _dragStartPosts = new System.Collections.Generic.Dictionary<int, Vector2>(_selPosts.Count);
+                        for (int sp = 0; sp < _selPosts.Count; sp++)
+                        {
+                            int sidx = _selPosts[sp];
+                            if (sidx < 0 || sidx >= (_world.authoredPosts?.Length ?? 0)) continue;
+                            _dragStartPosts[sidx] = _world.authoredPosts[sidx].position;
+                        }
+                    }
+                }
+                // Compute delta and apply to all selected planets for multi-drag (anchor-based)
+                if (_draggingPlanets && _dragAnchorPlanetIndex == i && _dragStartPlanets != null)
+                {
+                    Vector2 delta = clamped - _dragAnchorPlanetStart;
+                    var keys = _dragStartPlanets.Keys.ToList();
+                    for (int si = 0; si < keys.Count; si++)
+                    {
+                        int idx = keys[si];
+                        if (idx == i) continue;
+                        var startPos = _dragStartPlanets[idx];
+                        var op = _world.authoredPlanets[idx];
+                        float rOther = Mathf.Max(0.01f, GetRadiusForSize(op.size));
+                        float ax = Mathf.Max(0f, _world.halfExtents.x - rOther);
+                        float ay = Mathf.Max(0f, _world.halfExtents.y - rOther);
+                        var np = startPos + delta;
+                        np.x = Mathf.Clamp(np.x, -ax, ax);
+                        np.y = Mathf.Clamp(np.y, -ay, ay);
+                        op.position = np;
+                        _world.authoredPlanets[idx] = op;
+                    }
+                    // Apply same delta to selected posts
+                    if (_dragStartPosts != null && _world.authoredPosts != null)
+                    {
+                        var skeys = _dragStartPosts.Keys.ToList();
+                        float hxP = _world.halfExtents.x; float hyP = _world.halfExtents.y;
+                        for (int si = 0; si < skeys.Count; si++)
+                        {
+                            int sidx = skeys[si];
+                            var startPos = _dragStartPosts[sidx];
+                            var op = _world.authoredPosts[sidx];
+                            var np = startPos + delta;
+                            np.x = Mathf.Clamp(np.x, -hxP, hxP);
+                            np.y = Mathf.Clamp(np.y, -hyP, hyP);
+                            op.position = np;
+                            _world.authoredPosts[sidx] = op;
+                        }
+                    }
+                }
                 ap.position = clamped;
                 _world.authoredPlanets[i] = ap;
                 EditorUtility.SetDirty(_world);
                 if (_livePreview) PreviewWorld();
             }
 
-            // Label
-            Handles.BeginGUI();
-            var guiPt = HandleUtility.WorldToGUIPoint((Vector3)ap.position + new Vector3(0, radius + 0.2f, 0));
-            var rect = new Rect(guiPt.x - 80, guiPt.y - 36, 160, 32);
-            GUI.Box(rect, GUIContent.none);
-            GUILayout.BeginArea(rect);
-            GUILayout.Label($"{ap.size} / {ap.type}\nMass: {ap.mass}", EditorStyles.miniLabel);
-            GUILayout.EndArea();
-            Handles.EndGUI();
+            // Info bubble
+            if (_showPlanetInfo)
+            {
+                Handles.BeginGUI();
+                var guiPt = HandleUtility.WorldToGUIPoint((Vector3)ap.position + new Vector3(0, radius + 0.2f, 0));
+                var rect = new Rect(guiPt.x - 80, guiPt.y - 36, 160, 32);
+                GUI.Box(rect, GUIContent.none);
+                GUILayout.BeginArea(rect);
+                GUILayout.Label($"{ap.size} / {ap.type}\nMass: {ap.mass}", EditorStyles.miniLabel);
+                GUILayout.EndArea();
+                Handles.EndGUI();
+            }
         }
     }
 
@@ -1933,7 +2195,344 @@ public class WorldDesignerWindow : EditorWindow
         }
     }
 
+    private void NudgeSelection(Vector2 delta)
+    {
+        if (_world == null) return;
+        bool any = false;
+        Undo.RecordObject(_world, "Nudge Selection");
+        // Planets (radius-aware clamp)
+        if (_selPlanets != null && _world.authoredPlanets != null)
+        {
+            for (int i = 0; i < _selPlanets.Count; i++)
+            {
+                int idx = _selPlanets[i];
+                if (idx < 0 || idx >= _world.authoredPlanets.Length) continue;
+                var ap = _world.authoredPlanets[idx];
+                float r = Mathf.Max(0.01f, GetRadiusForSize(ap.size));
+                float ax = Mathf.Max(0f, _world.halfExtents.x - r);
+                float ay = Mathf.Max(0f, _world.halfExtents.y - r);
+                var np = ap.position + delta;
+                np.x = Mathf.Clamp(np.x, -ax, ax);
+                np.y = Mathf.Clamp(np.y, -ay, ay);
+                if (np != ap.position) { ap.position = np; _world.authoredPlanets[idx] = ap; any = true; }
+            }
+        }
+        // Posts (bounds clamp)
+        if (_selPosts != null && _world.authoredPosts != null)
+        {
+            for (int i = 0; i < _selPosts.Count; i++)
+            {
+                int idx = _selPosts[i];
+                if (idx < 0 || idx >= _world.authoredPosts.Length) continue;
+                var ap = _world.authoredPosts[idx];
+                var np = ap.position + delta;
+                np.x = Mathf.Clamp(np.x, -_world.halfExtents.x, _world.halfExtents.x);
+                np.y = Mathf.Clamp(np.y, -_world.halfExtents.y, _world.halfExtents.y);
+                if (np != ap.position) { ap.position = np; _world.authoredPosts[idx] = ap; any = true; }
+            }
+        }
+        if (any)
+        {
+            EditorUtility.SetDirty(_world);
+            Repaint();
+            SceneView.RepaintAll();
+            if (_livePreview) PreviewWorld();
+        }
+    }
+
+    private void HandleKeyboardNudge()
+    {
+        var e = Event.current;
+        if (e == null) return;
+        if (e.type != EventType.KeyDown) return;
+
+        // Respect SceneView arrow panning: only handle when a modifier is held
+        bool hasModifier = e.shift || e.control || e.command || e.alt;
+        if (!hasModifier) return;
+
+        Vector2 delta = Vector2.zero;
+        switch (e.keyCode)
+        {
+            case KeyCode.LeftArrow:  delta = new Vector2(-1f, 0f); break;
+            case KeyCode.RightArrow: delta = new Vector2( 1f, 0f); break;
+            case KeyCode.UpArrow:    delta = new Vector2( 0f, 1f); break;
+            case KeyCode.DownArrow:  delta = new Vector2( 0f,-1f); break;
+            default: return;
+        }
+
+        // Base step
+        float step = Mathf.Max(0.001f, _nudgeStep);
+        // Modifier scaling: Ctrl/Cmd = fast, Alt = fine
+        if (e.control || e.command) step *= 5f;
+        if (e.alt) step *= 0.2f;
+
+        NudgeSelection(delta * step);
+        e.Use();
+    }
+
     // --- Validation helpers ---
+    private void HandleClickSelection()
+    {
+        var e = Event.current;
+        if (e == null) return;
+        if (e.type != EventType.MouseDown || e.button != 0) return;
+        // Ignore clicks inside overlay toolbar so it doesn't affect selection
+        if (_overlayRect != Rect.zero && _overlayRect.Contains(e.mousePosition)) return;
+        // If box-select is active (Shift+Drag starts it), don't process click selection here
+        if (_boxSelectEnabled && e.shift && !e.alt) return;
+
+        Vector2 gui = e.mousePosition;
+        int hitPlanet = -1, hitPost = -1;
+        float hitDist = float.MaxValue;
+        const float pickRadius = 12f; // pixels
+
+        // Planets
+        if (_world.authoredPlanets != null)
+        {
+            for (int i = 0; i < _world.authoredPlanets.Length; i++)
+            {
+                var p = _world.authoredPlanets[i].position;
+                Vector2 g = HandleUtility.WorldToGUIPoint(p);
+                float d = Vector2.Distance(gui, g);
+                if (d <= pickRadius && d < hitDist)
+                {
+                    hitPlanet = i; hitPost = -1; hitDist = d;
+                }
+            }
+        }
+        // Posts
+        if (_world.authoredPosts != null)
+        {
+            for (int i = 0; i < _world.authoredPosts.Length; i++)
+            {
+                var p = _world.authoredPosts[i].position;
+                Vector2 g = HandleUtility.WorldToGUIPoint(p);
+                float d = Vector2.Distance(gui, g);
+                if (d <= pickRadius && d < hitDist)
+                {
+                    hitPost = i; hitPlanet = -1; hitDist = d;
+                }
+            }
+        }
+
+        bool additive = e.control || e.command;
+        bool subtractive = e.alt;
+        bool changed = false;
+        if (hitPlanet >= 0)
+        {
+            changed = true;
+            if (subtractive)
+                _selPlanets = _selPlanets.Where(id => id != hitPlanet).ToList();
+            else if (additive)
+            {
+                if (!_selPlanets.Contains(hitPlanet)) _selPlanets.Add(hitPlanet);
+            }
+            else
+            {
+                // If already selected, keep current selection intact (do not collapse)
+                if (!_selPlanets.Contains(hitPlanet))
+                {
+                    _selPlanets.Clear(); _selPlanets.Add(hitPlanet);
+                    _selPosts.Clear();
+                }
+                else
+                {
+                    changed = false; // No change to selection
+                }
+            }
+            _selPlanets = _selPlanets.Distinct().OrderBy(i => i).ToList();
+            SavePlanetSelection();
+        }
+        else if (hitPost >= 0)
+        {
+            changed = true;
+            if (subtractive)
+                _selPosts = _selPosts.Where(id => id != hitPost).ToList();
+            else if (additive)
+            {
+                if (!_selPosts.Contains(hitPost)) _selPosts.Add(hitPost);
+            }
+            else
+            {
+                // If already selected, keep current selection intact (do not collapse)
+                if (!_selPosts.Contains(hitPost))
+                {
+                    _selPosts.Clear(); _selPosts.Add(hitPost);
+                    _selPlanets.Clear();
+                }
+                else
+                {
+                    changed = false;
+                }
+            }
+            _selPosts = _selPosts.Distinct().OrderBy(i => i).ToList();
+            SavePostSelection();
+        }
+        else
+        {
+            // Clicked empty space: clear selection
+            if (!additive && !subtractive)
+            {
+                if ((_selPlanets?.Count ?? 0) > 0 || (_selPosts?.Count ?? 0) > 0)
+                {
+                    _selPlanets.Clear(); _selPosts.Clear();
+                    SavePlanetSelection(); SavePostSelection();
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            Repaint();
+            SceneView.RepaintAll();
+        }
+        // Do not e.Use() so FreeMoveHandle can still receive the drag if any
+    }
+    private void HandleBoxSelect(SceneView sv)
+    {
+        if (!_boxSelectEnabled) return;
+        var e = Event.current;
+        if (e == null) return;
+        // Start: Shift + LeftMouse on background (not on overlay UI)
+        if (!_boxSelecting && e.type == EventType.MouseDown && e.button == 0 && e.shift && !e.alt && (_overlayRect == Rect.zero || !_overlayRect.Contains(e.mousePosition)))
+        {
+            _boxSelecting = true;
+            _boxStartGui = e.mousePosition; _boxEndGui = _boxStartGui;
+            e.Use();
+        }
+        else if (_boxSelecting && e.type == EventType.MouseDrag)
+        {
+            _boxEndGui = e.mousePosition;
+            e.Use();
+            sv.Repaint();
+        }
+        else if (_boxSelecting && (e.type == EventType.MouseUp || e.type == EventType.Ignore))
+        {
+            var rect = ToRect(_boxStartGui, _boxEndGui);
+            bool add = e.control || e.command; // additive
+            bool subtract = e.alt; // subtractive
+            SelectWithinRect(rect, add, subtract);
+            _boxSelecting = false;
+            e.Use();
+        }
+
+        // Draw rectangle overlay
+        if (_boxSelecting)
+        {
+            var rect = ToRect(_boxStartGui, _boxEndGui);
+            Handles.BeginGUI();
+            var fill = new Color(0.3f, 0.7f, 1f, 0.15f);
+            var outline = new Color(0.3f, 0.7f, 1f, 0.85f);
+            EditorGUI.DrawRect(rect, fill);
+            Handles.color = outline;
+            Handles.DrawAAPolyLine(2f,
+                new Vector3(rect.xMin, rect.yMin), new Vector3(rect.xMax, rect.yMin),
+                new Vector3(rect.xMax, rect.yMax), new Vector3(rect.xMin, rect.yMax), new Vector3(rect.xMin, rect.yMin));
+            // Draw counts badge
+            CountHitsInRect(rect, out int pCount, out int sCount);
+            string label = "";
+            if (_boxSelectPlanets) label += $"Planets: {pCount}";
+            if (_boxSelectPosts) label += (label.Length > 0 ? "  •  " : "") + $"Posts: {sCount}";
+            if (label.Length > 0)
+            {
+                var pad = 4f;
+                var content = new GUIContent(label);
+                Vector2 size = GUI.skin.box.CalcSize(content);
+                var lb = new Rect(rect.xMax - size.x - 8f, rect.yMax + 6f, size.x + pad * 2f, size.y + pad);
+                EditorGUI.DrawRect(lb, new Color(0f, 0f, 0f, 0.35f));
+                GUI.Label(new Rect(lb.x + pad, lb.y + pad * 0.5f, lb.width - pad * 2f, lb.height - pad), content, EditorStyles.miniBoldLabel);
+            }
+            Handles.EndGUI();
+        }
+    }
+
+    private static Rect ToRect(Vector2 a, Vector2 b)
+    {
+        float x = Mathf.Min(a.x, b.x);
+        float y = Mathf.Min(a.y, b.y);
+        float w = Mathf.Abs(a.x - b.x);
+        float h = Mathf.Abs(a.y - b.y);
+        return new Rect(x, y, w, h);
+    }
+
+    private void SelectWithinRect(Rect guiRect, bool additive, bool subtractive)
+    {
+        if (_world == null) return;
+        // Planets
+        if (_boxSelectPlanets && _world.authoredPlanets != null)
+        {
+            var hits = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < _world.authoredPlanets.Length; i++)
+            {
+                var p = _world.authoredPlanets[i].position;
+                var gui = HandleUtility.WorldToGUIPoint(p);
+                if (guiRect.Contains(gui)) hits.Add(i);
+            }
+            ApplySelection(ref _selPlanets, hits, additive, subtractive);
+            SavePlanetSelection();
+        }
+        // Posts
+        if (_boxSelectPosts && _world.authoredPosts != null)
+        {
+            var hits = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < _world.authoredPosts.Length; i++)
+            {
+                var p = _world.authoredPosts[i].position;
+                var gui = HandleUtility.WorldToGUIPoint(p);
+                if (guiRect.Contains(gui)) hits.Add(i);
+            }
+            ApplySelection(ref _selPosts, hits, additive, subtractive);
+            SavePostSelection();
+        }
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
+    private void ApplySelection(ref System.Collections.Generic.List<int> selection, System.Collections.Generic.List<int> hits, bool additive, bool subtractive)
+    {
+        if (selection == null) selection = new System.Collections.Generic.List<int>();
+        if (subtractive)
+        {
+            var set = new System.Collections.Generic.HashSet<int>(selection);
+            for (int i = 0; i < hits.Count; i++) set.Remove(hits[i]);
+            selection = set.ToList();
+        }
+        else if (additive)
+        {
+            var set = new System.Collections.Generic.HashSet<int>(selection);
+            for (int i = 0; i < hits.Count; i++) set.Add(hits[i]);
+            selection = set.OrderBy(i => i).ToList();
+        }
+        else
+        {
+            selection = hits;
+        }
+    }
+
+    private void CountHitsInRect(Rect guiRect, out int planetCount, out int postCount)
+    {
+        planetCount = 0; postCount = 0;
+        if (_world == null) return;
+        if (_boxSelectPlanets && _world.authoredPlanets != null)
+        {
+            for (int i = 0; i < _world.authoredPlanets.Length; i++)
+            {
+                var p = _world.authoredPlanets[i].position;
+                var gui = HandleUtility.WorldToGUIPoint(p);
+                if (guiRect.Contains(gui)) planetCount++;
+            }
+        }
+        if (_boxSelectPosts && _world.authoredPosts != null)
+        {
+            for (int i = 0; i < _world.authoredPosts.Length; i++)
+            {
+                var p = _world.authoredPosts[i].position;
+                var gui = HandleUtility.WorldToGUIPoint(p);
+                if (guiRect.Contains(gui)) postCount++;
+            }
+        }
+    }
     private void DrawSceneValidationGuides()
     {
         if (_world == null) return;
