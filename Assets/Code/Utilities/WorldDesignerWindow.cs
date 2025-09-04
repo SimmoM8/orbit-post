@@ -19,6 +19,16 @@ public class WorldDesignerWindow : EditorWindow
     [SerializeField] private float _snapSize = 0.5f;
     [SerializeField] private bool _showBounds = true;
     [SerializeField] private bool _showProceduralInfo = false;
+    [SerializeField] private System.Collections.Generic.List<int> _selPlanets = new System.Collections.Generic.List<int>();
+    [SerializeField] private System.Collections.Generic.List<int> _selPosts = new System.Collections.Generic.List<int>();
+    [SerializeField] private bool _filterBySize = false;
+    [SerializeField] private PlanetSize _filterSize = PlanetSize.Medium;
+    [SerializeField] private bool _filterByType = false;
+    [SerializeField] private PlanetType _filterType = PlanetType.Default;
+    [SerializeField] private bool _postFilterByName = false;
+    [SerializeField] private string _postFilterName = "";
+    [SerializeField] private bool _postFilterByMinLevel = false;
+    [SerializeField] private int _postFilterMinLevel = 1;
 
     // EditorPrefs keys for persistence
     private const string PrefSnapEnabledKey = "WorldDesigner_SnapEnabled";
@@ -205,6 +215,47 @@ public class WorldDesignerWindow : EditorWindow
             _world.authoredPosts = new WorldDefinition.AuthoredPost[0];
 
         EditorGUILayout.LabelField("Posts", EditorStyles.boldLabel);
+
+        // Filter bar for posts
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            _postFilterByName = EditorGUILayout.ToggleLeft("Name contains", _postFilterByName, GUILayout.Width(110));
+            using (new EditorGUI.DisabledScope(!_postFilterByName))
+            {
+                _postFilterName = EditorGUILayout.TextField(_postFilterName, GUILayout.MinWidth(100));
+            }
+            GUILayout.Space(8);
+            _postFilterByMinLevel = EditorGUILayout.ToggleLeft("Min Level", _postFilterByMinLevel, GUILayout.Width(90));
+            using (new EditorGUI.DisabledScope(!_postFilterByMinLevel))
+            {
+                _postFilterMinLevel = Mathf.Max(1, EditorGUILayout.IntField(_postFilterMinLevel, GUILayout.Width(60)));
+            }
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Clear Filters", GUILayout.Width(110)))
+            {
+                _postFilterByName = false; _postFilterByMinLevel = false; _postFilterName = string.Empty; _postFilterMinLevel = 1;
+            }
+        }
+
+        // Bulk actions row for posts
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            int total = _world.authoredPosts.Length;
+            _selPosts.RemoveAll(i => i < 0 || i >= total);
+            EditorGUILayout.LabelField($"Selected: {_selPosts.Count}", GUILayout.Width(100));
+            if (GUILayout.Button("All", GUILayout.Width(40)))
+                _selPosts = Enumerable.Range(0, total).ToList();
+            if (GUILayout.Button("None", GUILayout.Width(50)))
+                _selPosts.Clear();
+            GUILayout.FlexibleSpace();
+            using (new EditorGUI.DisabledScope(_selPosts.Count == 0))
+            {
+                if (GUILayout.Button("Duplicate Selected", GUILayout.Width(150))) DuplicateSelectedPosts();
+                if (GUILayout.Button("Delete Selected", GUILayout.Width(130))) DeleteSelectedPosts();
+                if (GUILayout.Button("Snap Selected", GUILayout.Width(130))) SnapSelectedPosts();
+            }
+        }
+
         EditorGUI.BeginChangeCheck();
 
         int removeAt = -1;
@@ -212,12 +263,25 @@ public class WorldDesignerWindow : EditorWindow
         for (int i = 0; i < _world.authoredPosts.Length; i++)
         {
             var ap = _world.authoredPosts[i];
+            if (_postFilterByName && !string.IsNullOrEmpty(_postFilterName))
+            {
+                var name = ap.displayName ?? string.Empty;
+                if (name.IndexOf(_postFilterName, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+            }
+            if (_postFilterByMinLevel && ap.startLevel < _postFilterMinLevel) continue;
             EditorGUILayout.BeginVertical("box");
 
             using (new EditorGUILayout.HorizontalScope())
             {
+                bool sel = _selPosts.Contains(i);
+                bool selNew = GUILayout.Toggle(sel, GUIContent.none, GUILayout.Width(18));
+                if (selNew != sel)
+                {
+                    if (selNew) _selPosts.Add(i); else _selPosts.Remove(i);
+                }
                 EditorGUILayout.LabelField($"#{i}", GUILayout.Width(28));
                 ap.position = EditorGUILayout.Vector2Field("Position", ap.position);
+                GUILayout.Label($"L{Mathf.Max(1, ap.startLevel)}", EditorStyles.miniBoldLabel, GUILayout.Width(28));
                 if (GUILayout.Button("◉", GUILayout.Width(24))) FocusSceneOn(ap.position);
                 if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = i;
                 if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = i;
@@ -313,12 +377,185 @@ public class WorldDesignerWindow : EditorWindow
         SceneView.RepaintAll();
     }
 
+    private void DuplicateSelectedPosts()
+    {
+        if (_world == null || _world.authoredPosts == null || _world.authoredPosts.Length == 0) return;
+        var sel = _selPosts.Distinct().OrderBy(i => i).ToList();
+        if (sel.Count == 0) return;
+        Undo.RecordObject(_world, "Duplicate Selected Posts");
+        var list = _world.authoredPosts.ToList();
+        float dx = (_snapEnabled ? Mathf.Max(0.01f, _snapSize) : 0.5f);
+        int offset = 0;
+        foreach (var idx in sel)
+        {
+            if (idx + offset < 0 || idx + offset >= list.Count) continue;
+            var src = list[idx + offset];
+            var dup = src;
+            dup.position += new Vector2(dx, 0f);
+            dup.position.x = Mathf.Clamp(dup.position.x, -_world.halfExtents.x, _world.halfExtents.x);
+            dup.position.y = Mathf.Clamp(dup.position.y, -_world.halfExtents.y, _world.halfExtents.y);
+            list.Insert(idx + offset + 1, dup);
+            offset++;
+        }
+        _world.authoredPosts = list.ToArray();
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
+    private void DeleteSelectedPosts()
+    {
+        if (_world == null || _world.authoredPosts == null || _world.authoredPosts.Length == 0) return;
+        var sel = new System.Collections.Generic.HashSet<int>(_selPosts.Where(i => i >= 0 && i < _world.authoredPosts.Length));
+        if (sel.Count == 0) return;
+        Undo.RecordObject(_world, "Delete Selected Posts");
+        _world.authoredPosts = _world.authoredPosts.Where((_, idx) => !sel.Contains(idx)).ToArray();
+        _selPosts.Clear();
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
+    private void SnapSelectedPosts()
+    {
+        if (_world == null || _world.authoredPosts == null || _world.authoredPosts.Length == 0) return;
+        var sel = new System.Collections.Generic.HashSet<int>(_selPosts.Where(i => i >= 0 && i < _world.authoredPosts.Length));
+        if (sel.Count == 0) return;
+        float s = Mathf.Max(0.01f, _snapSize);
+        float hxB = _world.halfExtents.x;
+        float hyB = _world.halfExtents.y;
+        Undo.RecordObject(_world, "Snap Selected Posts To Grid");
+        for (int i = 0; i < _world.authoredPosts.Length; i++)
+        {
+            if (!sel.Contains(i)) continue;
+            var ap = _world.authoredPosts[i];
+            ap.position.x = Mathf.Round(ap.position.x / s) * s;
+            ap.position.y = Mathf.Round(ap.position.y / s) * s;
+            ap.position.x = Mathf.Clamp(ap.position.x, -hxB, hxB);
+            ap.position.y = Mathf.Clamp(ap.position.y, -hyB, hyB);
+            _world.authoredPosts[i] = ap;
+        }
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
+    private void DuplicateSelectedPlanets()
+    {
+        if (_world == null || _world.authoredPlanets == null || _world.authoredPlanets.Length == 0) return;
+        var sel = _selPlanets.Distinct().OrderBy(i => i).ToList();
+        if (sel.Count == 0) return;
+        Undo.RecordObject(_world, "Duplicate Selected Planets");
+        var list = _world.authoredPlanets.ToList();
+        float dx = (_snapEnabled ? Mathf.Max(0.01f, _snapSize) : 0.5f);
+        int offset = 0;
+        foreach (var idx in sel)
+        {
+            if (idx + offset < 0 || idx + offset >= list.Count) continue;
+            var src = list[idx + offset];
+            var dup = src;
+            dup.position += new Vector2(dx, 0f);
+            // radius-aware clamp
+            float r = GetRadiusForSize(dup.size);
+            float availX = Mathf.Max(0f, _world.halfExtents.x - r);
+            float availY = Mathf.Max(0f, _world.halfExtents.y - r);
+            dup.position.x = Mathf.Clamp(dup.position.x, -availX, availX);
+            dup.position.y = Mathf.Clamp(dup.position.y, -availY, availY);
+            list.Insert(idx + offset + 1, dup);
+            offset++;
+        }
+        _world.authoredPlanets = list.ToArray();
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
+    private void DeleteSelectedPlanets()
+    {
+        if (_world == null || _world.authoredPlanets == null || _world.authoredPlanets.Length == 0) return;
+        var sel = new System.Collections.Generic.HashSet<int>(_selPlanets.Where(i => i >= 0 && i < _world.authoredPlanets.Length));
+        if (sel.Count == 0) return;
+        Undo.RecordObject(_world, "Delete Selected Planets");
+        _world.authoredPlanets = _world.authoredPlanets.Where((_, idx) => !sel.Contains(idx)).ToArray();
+        _selPlanets.Clear();
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
+    private void SnapSelectedPlanets()
+    {
+        if (_world == null || _world.authoredPlanets == null || _world.authoredPlanets.Length == 0) return;
+        var sel = new System.Collections.Generic.HashSet<int>(_selPlanets.Where(i => i >= 0 && i < _world.authoredPlanets.Length));
+        if (sel.Count == 0) return;
+        float s = Mathf.Max(0.01f, _snapSize);
+        float hxB = _world.halfExtents.x;
+        float hyB = _world.halfExtents.y;
+        Undo.RecordObject(_world, "Snap Selected Planets To Grid");
+        for (int i = 0; i < _world.authoredPlanets.Length; i++)
+        {
+            if (!sel.Contains(i)) continue;
+            var ap = _world.authoredPlanets[i];
+            ap.position.x = Mathf.Round(ap.position.x / s) * s;
+            ap.position.y = Mathf.Round(ap.position.y / s) * s;
+            float r = GetRadiusForSize(ap.size);
+            float availX = Mathf.Max(0f, hxB - r);
+            float availY = Mathf.Max(0f, hyB - r);
+            ap.position.x = Mathf.Clamp(ap.position.x, -availX, availX);
+            ap.position.y = Mathf.Clamp(ap.position.y, -availY, availY);
+            _world.authoredPlanets[i] = ap;
+        }
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
     private void DrawPlanetsList()
     {
         if (_world.authoredPlanets == null)
             _world.authoredPlanets = new WorldDefinition.AuthoredPlanet[0];
 
         EditorGUILayout.LabelField("Planets", EditorStyles.boldLabel);
+
+        // Filter bar
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            _filterBySize = EditorGUILayout.ToggleLeft("Filter Size", _filterBySize, GUILayout.Width(90));
+            using (new EditorGUI.DisabledScope(!_filterBySize))
+            {
+                _filterSize = (PlanetSize)EditorGUILayout.EnumPopup(_filterSize, GUILayout.Width(110));
+            }
+            GUILayout.Space(8);
+            _filterByType = EditorGUILayout.ToggleLeft("Filter Type", _filterByType, GUILayout.Width(90));
+            using (new EditorGUI.DisabledScope(!_filterByType))
+            {
+                _filterType = (PlanetType)EditorGUILayout.EnumPopup(_filterType, GUILayout.Width(110));
+            }
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Clear Filters", GUILayout.Width(110)))
+            {
+                _filterBySize = false; _filterByType = false;
+            }
+        }
+
+        // Bulk actions row for planets
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            int total = _world.authoredPlanets.Length;
+            _selPlanets.RemoveAll(i => i < 0 || i >= total);
+            EditorGUILayout.LabelField($"Selected: {_selPlanets.Count}", GUILayout.Width(100));
+            if (GUILayout.Button("All", GUILayout.Width(40)))
+                _selPlanets = Enumerable.Range(0, total).ToList();
+            if (GUILayout.Button("None", GUILayout.Width(50)))
+                _selPlanets.Clear();
+            GUILayout.FlexibleSpace();
+            using (new EditorGUI.DisabledScope(_selPlanets.Count == 0))
+            {
+                if (GUILayout.Button("Duplicate Selected", GUILayout.Width(150))) DuplicateSelectedPlanets();
+                if (GUILayout.Button("Delete Selected", GUILayout.Width(130))) DeleteSelectedPlanets();
+                if (GUILayout.Button("Snap Selected", GUILayout.Width(130))) SnapSelectedPlanets();
+            }
+        }
         EditorGUI.BeginChangeCheck();
 
         int removeAt = -1;
@@ -326,12 +563,23 @@ public class WorldDesignerWindow : EditorWindow
         for (int i = 0; i < _world.authoredPlanets.Length; i++)
         {
             var ap = _world.authoredPlanets[i];
+            if (_filterBySize && ap.size != _filterSize) continue;
+            if (_filterByType && ap.type != _filterType) continue;
             EditorGUILayout.BeginVertical("box");
 
             using (new EditorGUILayout.HorizontalScope())
             {
+                bool sel = _selPlanets.Contains(i);
+                bool selNew = GUILayout.Toggle(sel, GUIContent.none, GUILayout.Width(18));
+                if (selNew != sel)
+                {
+                    if (selNew) _selPlanets.Add(i); else _selPlanets.Remove(i);
+                }
                 EditorGUILayout.LabelField($"#{i}", GUILayout.Width(28));
                 ap.position = EditorGUILayout.Vector2Field("Position", ap.position);
+                // quick badge: show size/type compactly
+                string badge = $"{ap.size}/{ap.type}";
+                GUILayout.Label(badge, EditorStyles.miniLabel, GUILayout.Width(120));
                 if (GUILayout.Button("◉", GUILayout.Width(24))) FocusSceneOn(ap.position);
                 if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = i;
                 if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = i;
@@ -339,6 +587,34 @@ public class WorldDesignerWindow : EditorWindow
 
             ap.size  = (PlanetSize)EditorGUILayout.EnumPopup("Size", ap.size);
             ap.type  = (PlanetType)EditorGUILayout.EnumPopup("Type", ap.type);
+
+            // Quick size presets
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("Size Presets", GUILayout.Width(85));
+                if (GUILayout.Button("+Small", EditorStyles.miniButton, GUILayout.Width(60))) ap.size = PlanetSize.Small;
+                if (GUILayout.Button("+Medium", EditorStyles.miniButton, GUILayout.Width(70))) ap.size = PlanetSize.Medium;
+                if (GUILayout.Button("+Large", EditorStyles.miniButton, GUILayout.Width(60))) ap.size = PlanetSize.Large;
+            }
+
+            // Quick type swatches
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("Type", GUILayout.Width(85));
+                var types = new PlanetType[] { PlanetType.Default, PlanetType.Fire, PlanetType.Water, PlanetType.Earth };
+                foreach (var t in types)
+                {
+                    var prevBg = GUI.backgroundColor;
+                    var col = TypeColor(t); col.a = 1f;
+                    GUI.backgroundColor = col;
+                    string label = t.ToString();
+                    if (GUILayout.Button(label, EditorStyles.miniButton, GUILayout.Width(64)))
+                    {
+                        ap.type = t;
+                    }
+                    GUI.backgroundColor = prevBg;
+                }
+            }
             ap.mass  = EditorGUILayout.FloatField(new GUIContent("Mass", "Independent mass per planet; gravity ignores 0."), ap.mass);
             ap.profile = (PlanetProfile)EditorGUILayout.ObjectField("Profile (optional)", ap.profile, typeof(PlanetProfile), false);
 
