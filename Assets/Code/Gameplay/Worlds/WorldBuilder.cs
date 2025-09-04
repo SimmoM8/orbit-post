@@ -12,6 +12,9 @@ public class WorldBuilder : MonoBehaviour
     private readonly List<DeliveryNode> _posts = new();
     private readonly List<Planet> _planets = new();
 
+    // Deterministic RNG for procedural generation (isolated from UnityEngine.Random)
+    private System.Random _procRand;
+
     void Start()
     {
         if (!definition) { Debug.LogError("WorldDefinition missing"); return; }
@@ -72,22 +75,8 @@ public class WorldBuilder : MonoBehaviour
             return;
         }
 
-        // Set the visual type (prefab's TypeSpriteSet will switch sprite)
-        planet.planetType = ap.type;
-        planet.ApplyTypeVisual();
-
-        // Assign production profile (not visuals) and rebuild weights
-        planet.profile = ap.profile;
-
-        // Apply authored mass (prefab defaults may be 0 by design)
-        planet.mass = ap.mass;
-        if (planet.mass <= 0f)
-        {
-            Debug.LogWarning($"[WorldBuilder] Planet at {ap.position} has mass 0; it will not contribute to gravity until you set a positive mass in the WorldDefinition.");
-        }
-
-        var producer = go.GetComponent<PlanetProducer>();
-        if (producer) producer.RebuildTypeWeights();
+        // Centralized application of authored data (type/profile/mass + producer weights)
+        WorldSpawnHelpers.ApplyAuthoredPlanet(planet, ap);
 
         _planets.Add(planet);
     }
@@ -108,39 +97,93 @@ public class WorldBuilder : MonoBehaviour
             return;
         }
 
-        // Apply starting level (clamped to at least 1)
-        node.level = Mathf.Max(1, ap.startLevel);
-
-        node.displayName = ap.displayName;
-        node.influenceRadius = ap.influenceRadius;
-        node.requestAmount = ap.initialRequestAmount; // syncs requestGoal internally
-        node.SetRequest(ap.initialRequestMaterial);   // applies color/label/UI
+        // Centralized application of authored data (level/name/influence/request)
+        WorldSpawnHelpers.ApplyAuthoredPost(node, ap);
 
         _posts.Add(node);
     }
 
     private void SpawnProcedural()
     {
-        // Placeholder: next step we’ll implement seeded placement (Poisson/jittered grid).
-        Random.InitState(definition.seed);
+        // Use System.Random for reproducible generation that doesn't affect Unity's global RNG
+        _procRand = new System.Random(definition.seed);
 
-        int postCount = Random.Range(definition.postCountRange.x, definition.postCountRange.y + 1);
-        int planetCount = Random.Range(definition.planetCountRange.x, definition.planetCountRange.y + 1);
+        int postCount = _procRand.Next(definition.postCountRange.x, definition.postCountRange.y + 1);
+        int planetCount = _procRand.Next(definition.planetCountRange.x, definition.planetCountRange.y + 1);
 
-        // For now, simple random inside bounds (we’ll upgrade immediately in Step 2)
+        // Place posts first (no spacing constraint specified for posts)
+        var postPositions = new List<Vector2>(postCount);
         for (int i = 0; i < postCount; i++)
-            SpawnPost(RandomInBounds());
+        {
+            var pos = RandomInBounds();
+            postPositions.Add(pos);
+            SpawnPost(pos);
+        }
 
-        for (int i = 0; i < planetCount; i++)
-            SpawnPlanet(RandomInBounds());
+        // Place planets with constraints: min spacing between planets and min distance from posts
+        var planetPositions = new List<Vector2>(planetCount);
+        float minPlanetSpacing = Mathf.Max(0f, definition.minPlanetSpacing);
+        float minFromPost = Mathf.Max(0f, definition.minDistanceFromPost);
+
+        int placed = 0;
+        int maxAttempts = Mathf.Max(planetCount * 50, 500); // cap attempts to avoid infinite loops
+        int attempts = 0;
+        while (placed < planetCount && attempts < maxAttempts)
+        {
+            attempts++;
+            var candidate = RandomInBounds();
+
+            bool ok = true;
+            // Check against existing planets
+            for (int pi = 0; pi < planetPositions.Count; pi++)
+            {
+                if (Vector2.SqrMagnitude(candidate - planetPositions[pi]) < (minPlanetSpacing * minPlanetSpacing))
+                {
+                    ok = false; break;
+                }
+            }
+            if (!ok) continue;
+
+            // Check against posts
+            for (int si = 0; si < postPositions.Count; si++)
+            {
+                if (Vector2.SqrMagnitude(candidate - postPositions[si]) < (minFromPost * minFromPost))
+                {
+                    ok = false; break;
+                }
+            }
+            if (!ok) continue;
+
+            // Accept and spawn
+            planetPositions.Add(candidate);
+            SpawnPlanet(candidate);
+            placed++;
+        }
+
+        if (placed < planetCount)
+        {
+            Debug.LogWarning($"[WorldBuilder] Procedural placement placed {placed}/{planetCount} planets due to spacing constraints. Consider reducing constraints or expanding bounds.");
+        }
+
+        // Clear after use so other systems fall back to Unity RNG as expected
+        _procRand = null;
     }
 
     private Vector2 RandomInBounds()
     {
-        return new Vector2(
-            Random.Range(-definition.halfExtents.x, definition.halfExtents.x),
-            Random.Range(-definition.halfExtents.y, definition.halfExtents.y)
-        );
+        if (_procRand != null)
+        {
+            float x = Mathf.Lerp(-definition.halfExtents.x, definition.halfExtents.x, (float)_procRand.NextDouble());
+            float y = Mathf.Lerp(-definition.halfExtents.y, definition.halfExtents.y, (float)_procRand.NextDouble());
+            return new Vector2(x, y);
+        }
+        else
+        {
+            return new Vector2(
+                Random.Range(-definition.halfExtents.x, definition.halfExtents.x),
+                Random.Range(-definition.halfExtents.y, definition.halfExtents.y)
+            );
+        }
     }
 
     private void SpawnPost(Vector2 position)
@@ -188,6 +231,13 @@ public class WorldBuilder : MonoBehaviour
     private T RandomEnumValue<T>()
     {
         var values = System.Enum.GetValues(typeof(T));
-        return (T)values.GetValue(Random.Range(0, values.Length));
+        if (_procRand != null)
+        {
+            return (T)values.GetValue(_procRand.Next(0, values.Length));
+        }
+        else
+        {
+            return (T)values.GetValue(Random.Range(0, values.Length));
+        }
     }
 }

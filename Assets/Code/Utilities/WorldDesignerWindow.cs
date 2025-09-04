@@ -15,6 +15,12 @@ public class WorldDesignerWindow : EditorWindow
 
     [SerializeField] private Vector2 _scroll;
     [SerializeField] private bool _lockPreview = true; // prevent selecting/moving preview instances
+    [SerializeField] private bool _snapEnabled = false;
+    [SerializeField] private float _snapSize = 0.5f;
+
+    // EditorPrefs keys for persistence
+    private const string PrefSnapEnabledKey = "WorldDesigner_SnapEnabled";
+    private const string PrefSnapSizeKey = "WorldDesigner_SnapSize";
 
     // Handle colors by type (editor-only hinting)
     private static readonly Color _typeDefault = new Color(1f, 1f, 1f, 0.8f);
@@ -35,11 +41,19 @@ public class WorldDesignerWindow : EditorWindow
     private void OnEnable()
     {
         HookScene(true);
+        // Load snap prefs
+        if (EditorPrefs.HasKey(PrefSnapEnabledKey))
+            _snapEnabled = EditorPrefs.GetBool(PrefSnapEnabledKey, _snapEnabled);
+        if (EditorPrefs.HasKey(PrefSnapSizeKey))
+            _snapSize = Mathf.Max(0.01f, EditorPrefs.GetFloat(PrefSnapSizeKey, _snapSize));
     }
 
     private void OnDisable()
     {
         HookScene(false);
+        // Save snap prefs
+        EditorPrefs.SetBool(PrefSnapEnabledKey, _snapEnabled);
+        EditorPrefs.SetFloat(PrefSnapSizeKey, Mathf.Max(0.01f, _snapSize));
     }
 
     private void HookScene(bool hook)
@@ -97,6 +111,34 @@ public class WorldDesignerWindow : EditorWindow
             }
         }
 
+        // Snap options
+        EditorGUILayout.Space();
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            bool prevSnapEnabled = _snapEnabled;
+            float prevSnapSize = _snapSize;
+
+            _snapEnabled = EditorGUILayout.Toggle(new GUIContent("Snap To Grid", "If enabled, dragging planets snaps their position to a grid."), _snapEnabled, GUILayout.Width(140));
+            using (new EditorGUI.DisabledScope(!_snapEnabled))
+            {
+                _snapSize = EditorGUILayout.FloatField(new GUIContent("Snap Size", "Grid size used for snapping."), Mathf.Max(0.01f, _snapSize));
+            }
+
+            // Persist if changed
+            if (_snapEnabled != prevSnapEnabled)
+                EditorPrefs.SetBool(PrefSnapEnabledKey, _snapEnabled);
+            if (!Mathf.Approximately(_snapSize, prevSnapSize))
+                EditorPrefs.SetFloat(PrefSnapSizeKey, Mathf.Max(0.01f, _snapSize));
+        }
+
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            if (GUILayout.Button(new GUIContent("Snap All Now", "Round all authored planet positions to the current grid size."), GUILayout.Width(140)))
+            {
+                SnapAllToGrid();
+            }
+        }
+
         EditorGUILayout.Space();
         _lockPreview = EditorGUILayout.Toggle(new GUIContent("Lock Preview Instances", "If enabled, Preview World spawns non-editable instances that cannot be selected/moved and won't be saved."), _lockPreview);
 
@@ -111,6 +153,32 @@ public class WorldDesignerWindow : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    private void SnapAllToGrid()
+    {
+        if (_world == null || _world.authoredPlanets == null || _world.authoredPlanets.Length == 0) return;
+        float s = Mathf.Max(0.01f, _snapSize);
+        float hxB = _world.halfExtents.x;
+        float hyB = _world.halfExtents.y;
+        Undo.RecordObject(_world, "Snap All Planets To Grid");
+        for (int i = 0; i < _world.authoredPlanets.Length; i++)
+        {
+            var ap = _world.authoredPlanets[i];
+            // snap
+            ap.position.x = Mathf.Round(ap.position.x / s) * s;
+            ap.position.y = Mathf.Round(ap.position.y / s) * s;
+            // radius-aware clamp
+            float r = GetRadiusForSize(ap.size);
+            float availX = Mathf.Max(0f, hxB - r);
+            float availY = Mathf.Max(0f, hyB - r);
+            ap.position.x = Mathf.Clamp(ap.position.x, -availX, availX);
+            ap.position.y = Mathf.Clamp(ap.position.y, -availY, availY);
+            _world.authoredPlanets[i] = ap;
+        }
+        EditorUtility.SetDirty(_world);
+        Repaint();
+        SceneView.RepaintAll();
+    }
+
     private void DrawPlanetsList()
     {
         if (_world.authoredPlanets == null)
@@ -120,6 +188,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorGUI.BeginChangeCheck();
 
         int removeAt = -1;
+        int duplicateAt = -1;
         for (int i = 0; i < _world.authoredPlanets.Length; i++)
         {
             var ap = _world.authoredPlanets[i];
@@ -129,6 +198,7 @@ public class WorldDesignerWindow : EditorWindow
             {
                 EditorGUILayout.LabelField($"#{i}", GUILayout.Width(28));
                 ap.position = EditorGUILayout.Vector2Field("Position", ap.position);
+                if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = i;
                 if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = i;
             }
 
@@ -144,6 +214,23 @@ public class WorldDesignerWindow : EditorWindow
 
             _world.authoredPlanets[i] = ap;
             EditorGUILayout.EndVertical();
+        }
+
+        if (duplicateAt >= 0)
+        {
+            Undo.RecordObject(_world, "Duplicate Planet");
+            var list = _world.authoredPlanets?.ToList() ?? new System.Collections.Generic.List<WorldDefinition.AuthoredPlanet>();
+            var src = list[duplicateAt];
+            var dup = src;
+            // nudge position slightly to avoid perfect overlap
+            float dx = (_snapEnabled ? Mathf.Max(0.01f, _snapSize) : 0.5f);
+            dup.position += new Vector2(dx, 0f);
+            // clamp to bounds
+            dup.position.x = Mathf.Clamp(dup.position.x, -_world.halfExtents.x, _world.halfExtents.x);
+            dup.position.y = Mathf.Clamp(dup.position.y, -_world.halfExtents.y, _world.halfExtents.y);
+            list.Insert(duplicateAt + 1, dup);
+            _world.authoredPlanets = list.ToArray();
+            EditorUtility.SetDirty(_world);
         }
 
         if (removeAt >= 0)
@@ -194,7 +281,59 @@ public class WorldDesignerWindow : EditorWindow
     {
         if (!_world || _world.authoredPlanets == null) return;
 
+        // Draw world bounds (centered at 0,0) for visual guidance
+        {
+            var hx = _world.halfExtents.x;
+            var hy = _world.halfExtents.y;
+            var verts = new Vector3[]
+            {
+                new Vector3(-hx, -hy, 0),
+                new Vector3(-hx,  hy, 0),
+                new Vector3( hx,  hy, 0),
+                new Vector3( hx, -hy, 0),
+            };
+            var fill = new Color(0.2f, 0.8f, 1f, 0.05f);
+            var outline = new Color(0.2f, 0.8f, 1f, 0.9f);
+            Handles.DrawSolidRectangleWithOutline(verts, fill, outline);
+        }
+
         Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+
+        // Grid overlay when snapping is enabled
+        if (_snapEnabled)
+        {
+            float s = Mathf.Max(0.01f, _snapSize);
+            float hx = _world.halfExtents.x;
+            float hy = _world.halfExtents.y;
+
+            // Safety: avoid excessive lines for tiny snap sizes
+            int maxLines = 1200;
+            int vCount = Mathf.FloorToInt((hx * 2f) / s) + 1;
+            int hCount = Mathf.FloorToInt((hy * 2f) / s) + 1;
+            if (vCount + hCount <= maxLines)
+            {
+                var gridCol = new Color(0.2f, 0.8f, 1f, 0.08f);
+                var axisCol = new Color(0.2f, 0.8f, 1f, 0.25f);
+
+                int minXi = Mathf.CeilToInt(-hx / s);
+                int maxXi = Mathf.FloorToInt(hx / s);
+                for (int xi = minXi; xi <= maxXi; xi++)
+                {
+                    float x = xi * s;
+                    Handles.color = Mathf.Abs(x) < 1e-4f ? axisCol : gridCol;
+                    Handles.DrawLine(new Vector3(x, -hy, 0f), new Vector3(x, hy, 0f));
+                }
+
+                int minYi = Mathf.CeilToInt(-hy / s);
+                int maxYi = Mathf.FloorToInt(hy / s);
+                for (int yi = minYi; yi <= maxYi; yi++)
+                {
+                    float y = yi * s;
+                    Handles.color = Mathf.Abs(y) < 1e-4f ? axisCol : gridCol;
+                    Handles.DrawLine(new Vector3(-hx, y, 0f), new Vector3(hx, y, 0f));
+                }
+            }
+        }
         for (int i = 0; i < _world.authoredPlanets.Length; i++)
         {
             var ap = _world.authoredPlanets[i];
@@ -208,11 +347,27 @@ public class WorldDesignerWindow : EditorWindow
 
             // Position handle (2D)
             EditorGUI.BeginChangeCheck();
-            var fmh_203_73_638905931160964810 = Quaternion.identity; Vector3 pos3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
+            Vector3 pos3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
+            // Optional snap to grid
+            if (_snapEnabled)
+            {
+                float s = Mathf.Max(0.01f, _snapSize);
+                pos3.x = Mathf.Round(pos3.x / s) * s;
+                pos3.y = Mathf.Round(pos3.y / s) * s;
+            }
+            // Clamp to world bounds accounting for planet radius (keep whole disc inside)
+            var hxB = _world.halfExtents.x;
+            var hyB = _world.halfExtents.y;
+            float availX = Mathf.Max(0f, hxB - radius);
+            float availY = Mathf.Max(0f, hyB - radius);
+            Vector2 clamped = new Vector2(
+                Mathf.Clamp(pos3.x, -availX, availX),
+                Mathf.Clamp(pos3.y, -availY, availY)
+            );
             if (EditorGUI.EndChangeCheck())
             {
                 Undo.RecordObject(_world, "Move Planet");
-                ap.position = (Vector2)pos3;
+                ap.position = clamped;
                 _world.authoredPlanets[i] = ap;
                 EditorUtility.SetDirty(_world);
             }
@@ -243,13 +398,8 @@ public class WorldDesignerWindow : EditorWindow
     private float GetRadiusForSize(PlanetSize size)
     {
         if (_world == null || _world.planetPrefabs == null) return 1f;
-        if (_world.planetPrefabs.TryGet(size, out var prefab) && prefab)
-        {
-            var col = prefab.GetComponent<CircleCollider2D>();
-            if (col) return Mathf.Max(0.01f, col.radius);
-            var sr = prefab.GetComponentInChildren<SpriteRenderer>();
-            if (sr) return Mathf.Max(sr.bounds.extents.x, sr.bounds.extents.y);
-        }
+        if (_world.planetPrefabs.TryGetRadius(size, out float r))
+            return Mathf.Max(0.01f, r);
         return 1f;
     }
 
@@ -306,10 +456,7 @@ public class WorldDesignerWindow : EditorWindow
             var planet = go.GetComponent<Planet>();
             if (planet)
             {
-                planet.planetType = ap.type;
-                planet.ApplyTypeVisual();
-                planet.profile = ap.profile;
-                planet.mass = ap.mass;
+                WorldSpawnHelpers.ApplyAuthoredPlanet(planet, ap);
             }
         }
 
