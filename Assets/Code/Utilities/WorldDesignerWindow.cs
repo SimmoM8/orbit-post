@@ -28,6 +28,7 @@ public class WorldDesignerWindow : EditorWindow
     private static readonly Color _typeFire    = new Color(1f, 0.45f, 0.15f, 0.8f);
     private static readonly Color _typeWater   = new Color(0.2f, 0.6f, 1f, 0.8f);
     private static readonly Color _typeEarth   = new Color(0.4f, 0.8f, 0.4f, 0.8f);
+    private static readonly Color _postRing    = new Color(1f, 0.9f, 0.2f, 0.9f);
 
     // Preview parenting
     private const string PreviewRootName = "__WorldPreview__";
@@ -81,6 +82,22 @@ public class WorldDesignerWindow : EditorWindow
                 EditorGUIUtility.PingObject(_world);
         }
 
+        // Quick access: ping referenced prefabs/data assets
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            using (new EditorGUI.DisabledScope(!_world))
+            {
+                if (GUILayout.Button(new GUIContent("Ping Planet Library", "Ping the assigned PlanetPrefabLibrary asset."), GUILayout.Width(160)))
+                {
+                    if (_world && _world.planetPrefabs) EditorGUIUtility.PingObject(_world.planetPrefabs);
+                }
+                if (GUILayout.Button(new GUIContent("Ping Post Prefab", "Ping the assigned Post prefab asset."), GUILayout.Width(140)))
+                {
+                    if (_world && _world.postPrefab) EditorGUIUtility.PingObject(_world.postPrefab);
+                }
+            }
+        }
+
         if (!_world)
         {
             EditorGUILayout.HelpBox("Assign a WorldDefinition asset to begin.", MessageType.Info);
@@ -113,6 +130,10 @@ public class WorldDesignerWindow : EditorWindow
 
         // Begin scrollable content (so large worlds are manageable)
         _scroll = EditorGUILayout.BeginScrollView(_scroll);
+
+        // Authored posts list (read/write)
+        EditorGUILayout.Space();
+        DrawPostsList();
 
         EditorGUILayout.Space();
         DrawPlanetsList();
@@ -171,6 +192,94 @@ public class WorldDesignerWindow : EditorWindow
         }
 
         EditorGUILayout.EndScrollView();
+    }
+
+    private void DrawPostsList()
+    {
+        if (_world.authoredPosts == null)
+            _world.authoredPosts = new WorldDefinition.AuthoredPost[0];
+
+        EditorGUILayout.LabelField("Posts", EditorStyles.boldLabel);
+        EditorGUI.BeginChangeCheck();
+
+        int removeAt = -1;
+        int duplicateAt = -1;
+        for (int i = 0; i < _world.authoredPosts.Length; i++)
+        {
+            var ap = _world.authoredPosts[i];
+            EditorGUILayout.BeginVertical("box");
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField($"#{i}", GUILayout.Width(28));
+                ap.position = EditorGUILayout.Vector2Field("Position", ap.position);
+                if (GUILayout.Button("◉", GUILayout.Width(24))) FocusSceneOn(ap.position);
+                if (GUILayout.Button("⧉", GUILayout.Width(24))) duplicateAt = i;
+                if (GUILayout.Button("×", GUILayout.Width(24))) removeAt = i;
+            }
+
+            ap.startLevel = Mathf.Max(1, EditorGUILayout.IntField("Start Level", ap.startLevel));
+            ap.displayName = EditorGUILayout.TextField("Display Name", ap.displayName);
+            ap.influenceRadius = EditorGUILayout.FloatField("Influence Radius", ap.influenceRadius);
+            ap.initialRequestMaterial = (PackageType)EditorGUILayout.ObjectField("Initial Request Material", ap.initialRequestMaterial, typeof(PackageType), false);
+            ap.initialRequestAmount = Mathf.Max(1, EditorGUILayout.IntField("Initial Request Amount", ap.initialRequestAmount));
+
+            _world.authoredPosts[i] = ap;
+            EditorGUILayout.EndVertical();
+        }
+
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            if (GUILayout.Button("Add Post"))
+            {
+                Undo.RecordObject(_world, "Add Post");
+                var list = _world.authoredPosts?.ToList() ?? new System.Collections.Generic.List<WorldDefinition.AuthoredPost>();
+                list.Add(new WorldDefinition.AuthoredPost
+                {
+                    position = Vector2.zero,
+                    startLevel = 1,
+                    displayName = "Post",
+                    influenceRadius = 7f,
+                    initialRequestMaterial = null,
+                    initialRequestAmount = 3
+                });
+                _world.authoredPosts = list.ToArray();
+                EditorUtility.SetDirty(_world);
+                Repaint();
+                SceneView.RepaintAll();
+            }
+        }
+
+        if (duplicateAt >= 0)
+        {
+            Undo.RecordObject(_world, "Duplicate Post");
+            var list = _world.authoredPosts?.ToList() ?? new System.Collections.Generic.List<WorldDefinition.AuthoredPost>();
+            var src = list[duplicateAt];
+            var dup = src;
+            float dx = (_snapEnabled ? Mathf.Max(0.01f, _snapSize) : 0.5f);
+            dup.position += new Vector2(dx, 0f);
+            // clamp to bounds
+            dup.position.x = Mathf.Clamp(dup.position.x, -_world.halfExtents.x, _world.halfExtents.x);
+            dup.position.y = Mathf.Clamp(dup.position.y, -_world.halfExtents.y, _world.halfExtents.y);
+            list.Insert(duplicateAt + 1, dup);
+            _world.authoredPosts = list.ToArray();
+            EditorUtility.SetDirty(_world);
+        }
+
+        if (removeAt >= 0)
+        {
+            Undo.RecordObject(_world, "Remove Post");
+            _world.authoredPosts = _world.authoredPosts.Where((_, idx) => idx != removeAt).ToArray();
+            EditorUtility.SetDirty(_world);
+        }
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            Undo.RecordObject(_world, "Edit Posts");
+            EditorUtility.SetDirty(_world);
+            Repaint();
+            SceneView.RepaintAll();
+        }
     }
 
     private void SnapAllToGrid()
@@ -354,6 +463,56 @@ public class WorldDesignerWindow : EditorWindow
                 }
             }
         }
+
+        // Posts: influence ring + position handle
+        if (_world.authoredPosts != null)
+        {
+            for (int i = 0; i < _world.authoredPosts.Length; i++)
+            {
+                var ap = _world.authoredPosts[i];
+
+                // Draw influence radius
+                if (ap.influenceRadius > 0f)
+                {
+                    Handles.color = _postRing;
+                    Handles.DrawWireDisc((Vector3)ap.position, Vector3.forward, ap.influenceRadius);
+                }
+
+                // Position handle (2D) with optional snapping and bounds clamp
+                EditorGUI.BeginChangeCheck();
+                Vector3 p3 = Handles.FreeMoveHandle((Vector3)ap.position, 0.12f, Vector3.zero, Handles.DotHandleCap);
+                if (_snapEnabled)
+                {
+                    float s = Mathf.Max(0.01f, _snapSize);
+                    p3.x = Mathf.Round(p3.x / s) * s;
+                    p3.y = Mathf.Round(p3.y / s) * s;
+                }
+                float hxP = _world.halfExtents.x;
+                float hyP = _world.halfExtents.y;
+                Vector2 clampedP = new Vector2(
+                    Mathf.Clamp(p3.x, -hxP, hxP),
+                    Mathf.Clamp(p3.y, -hyP, hyP)
+                );
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(_world, "Move Post");
+                    ap.position = clampedP;
+                    _world.authoredPosts[i] = ap;
+                    EditorUtility.SetDirty(_world);
+                }
+
+                // Label
+                Handles.BeginGUI();
+                var guiPtP = HandleUtility.WorldToGUIPoint((Vector3)ap.position + new Vector3(0, 0.4f, 0));
+                var rectP = new Rect(guiPtP.x - 80, guiPtP.y - 28, 160, 24);
+                GUI.Box(rectP, GUIContent.none);
+                GUILayout.BeginArea(rectP);
+                GUILayout.Label($"{(string.IsNullOrEmpty(ap.displayName) ? "Post" : ap.displayName)}  L{Mathf.Max(1, ap.startLevel)}", EditorStyles.miniLabel);
+                GUILayout.EndArea();
+                Handles.EndGUI();
+            }
+        }
+
         for (int i = 0; i < _world.authoredPlanets.Length; i++)
         {
             var ap = _world.authoredPlanets[i];
@@ -451,9 +610,9 @@ public class WorldDesignerWindow : EditorWindow
 
     private void PreviewWorld()
     {
-        if (!_world || _world.planetPrefabs == null)
+        if (!_world)
         {
-            EditorUtility.DisplayDialog("Preview World", "Assign a WorldDefinition with a Planet Prefab Library first.", "OK");
+            EditorUtility.DisplayDialog("Preview World", "Assign a WorldDefinition asset first.", "OK");
             return;
         }
 
@@ -464,19 +623,40 @@ public class WorldDesignerWindow : EditorWindow
         // Ensure the preview root never gets saved
         root.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
 
-        // Spawn via the same rules as runtime builder (size prefab + type + profile + mass)
-        foreach (var ap in _world.authoredPlanets)
+        // Spawn POSTS via runtime rules (if prefab exists)
+        if (_world.authoredPosts != null && _world.postPrefab)
         {
-            if (!_world.planetPrefabs.TryGet(ap.size, out var prefab) || !prefab) continue;
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
-            go.transform.SetParent(root.transform);
-            go.transform.position = ap.position;
-            go.transform.localScale = Vector3.one;
-
-            var planet = go.GetComponent<Planet>();
-            if (planet)
+            foreach (var post in _world.authoredPosts)
             {
-                WorldSpawnHelpers.ApplyAuthoredPlanet(planet, ap);
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(_world.postPrefab);
+                go.transform.SetParent(root.transform);
+                go.transform.position = post.position;
+                go.transform.localScale = Vector3.one;
+
+                var node = go.GetComponent<DeliveryNode>();
+                if (node)
+                {
+                    WorldSpawnHelpers.ApplyAuthoredPost(node, post);
+                }
+            }
+        }
+
+        // Spawn PLANETS via the same rules as runtime builder (size prefab + type + profile + mass)
+        if (_world.authoredPlanets != null && _world.planetPrefabs != null)
+        {
+            foreach (var ap in _world.authoredPlanets)
+            {
+                if (!_world.planetPrefabs.TryGet(ap.size, out var prefab) || !prefab) continue;
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                go.transform.SetParent(root.transform);
+                go.transform.position = ap.position;
+                go.transform.localScale = Vector3.one;
+
+                var planet = go.GetComponent<Planet>();
+                if (planet)
+                {
+                    WorldSpawnHelpers.ApplyAuthoredPlanet(planet, ap);
+                }
             }
         }
 
@@ -506,6 +686,20 @@ public class WorldDesignerWindow : EditorWindow
 #endif
 
         Undo.DestroyObjectImmediate(root);
+    }
+
+    private void FocusSceneOn(Vector2 position)
+    {
+        // Ping the world asset for quick locate
+        if (_world) EditorGUIUtility.PingObject(_world);
+        // Move SceneView pivot to the target position
+        var sv = SceneView.lastActiveSceneView;
+        if (sv != null)
+        {
+            Vector3 pivot = new Vector3(position.x, position.y, 0f);
+            sv.LookAt(pivot);
+            sv.Repaint();
+        }
     }
 }
 #endif
