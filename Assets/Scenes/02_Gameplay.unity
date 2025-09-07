@@ -1772,6 +1772,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   definition: {fileID: 11400000, guid: 90e633e41ae1a459d85927991c123801, type: 2}
+  _debugDrawGizmos: 1
+  _debugDrawBounds: 1
+  _debugDrawOnlyInProcedural: 1
 --- !u!4 &1571975052
 Transform:
   m_ObjectHideFlags: 0

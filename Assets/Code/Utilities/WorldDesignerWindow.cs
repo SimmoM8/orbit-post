@@ -47,9 +47,11 @@ public class WorldDesignerWindow : EditorWindow
     private Vector2 _boxStartGui, _boxEndGui;
     [SerializeField] private float _nudgeStep = 1f;
     private Rect _overlayRect;
+    [SerializeField] private Vector2 _overlayScroll;
     [SerializeField] private bool _showPlanetInfo = true;
     [SerializeField] private bool _showPostInfo = true;
     [SerializeField] private bool _showInfo = true; // master toggle
+    [SerializeField] private bool _previewEnabled = false; // preview toggle
     // Group drag state
     private bool _draggingPlanets;
     private bool _draggingPosts;
@@ -105,6 +107,7 @@ public class WorldDesignerWindow : EditorWindow
     private const string PrefShowPlanetInfoKey = "WorldDesigner_ShowPlanetInfo";
     private const string PrefShowPostInfoKey = "WorldDesigner_ShowPostInfo";
     private const string PrefShowInfoKey = "WorldDesigner_ShowInfo";
+    private const string PrefPreviewEnabledKey = "WorldDesigner_PreviewEnabled";
 
     // Handle colors by type (editor-only hinting)
     private static readonly Color _typeDefault = new Color(1f, 1f, 1f, 0.8f);
@@ -163,6 +166,8 @@ public class WorldDesignerWindow : EditorWindow
             _showPostInfo = EditorPrefs.GetBool(PrefShowPostInfoKey, _showPostInfo);
         if (EditorPrefs.HasKey(PrefShowInfoKey))
             _showInfo = EditorPrefs.GetBool(PrefShowInfoKey, _showInfo);
+        if (EditorPrefs.HasKey(PrefPreviewEnabledKey))
+            _previewEnabled = EditorPrefs.GetBool(PrefPreviewEnabledKey, _previewEnabled);
 
         // Attempt to load per-item foldouts for current world (if any)
         TryLoadItemFoldouts();
@@ -191,6 +196,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorPrefs.SetBool(PrefShowPlanetInfoKey, _showPlanetInfo);
         EditorPrefs.SetBool(PrefShowPostInfoKey, _showPostInfo);
         EditorPrefs.SetBool(PrefShowInfoKey, _showInfo);
+        EditorPrefs.SetBool(PrefPreviewEnabledKey, _previewEnabled);
 
         // Save per-item foldouts for current world
         SaveItemFoldouts();
@@ -336,6 +342,16 @@ public class WorldDesignerWindow : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    // Small helper to create a GUIContent with an icon + text
+    private static GUIContent IconLabel(string iconName, string text, string tooltip)
+    {
+        var gc = EditorGUIUtility.IconContent(iconName);
+        if (gc == null) gc = new GUIContent();
+        gc.text = text;
+        gc.tooltip = tooltip;
+        return gc;
+    }
+
     private void DrawBatchEditPanel()
     {
         EditorGUILayout.LabelField("Batch Edit", EditorStyles.boldLabel);
@@ -430,7 +446,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void ApplyBatchToSelectedPosts()
@@ -452,7 +468,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DrawPostsList()
@@ -615,7 +631,7 @@ public class WorldDesignerWindow : EditorWindow
                 EditorUtility.SetDirty(_world);
                 Repaint();
                 SceneView.RepaintAll();
-                if (_livePreview) PreviewWorld();
+                if (_previewEnabled && _livePreview) PreviewWorld();
             }
         }
 
@@ -641,7 +657,7 @@ public class WorldDesignerWindow : EditorWindow
                 SaveItemFoldoutsPosts();
             }
             EditorUtility.SetDirty(_world);
-            if (_livePreview) PreviewWorld();
+            if (_previewEnabled && _livePreview) PreviewWorld();
         }
 
         if (removeAt >= 0)
@@ -654,7 +670,7 @@ public class WorldDesignerWindow : EditorWindow
                 SaveItemFoldoutsPosts();
             }
             EditorUtility.SetDirty(_world);
-            if (_livePreview) PreviewWorld();
+            if (_previewEnabled && _livePreview) PreviewWorld();
         }
 
         if (EditorGUI.EndChangeCheck())
@@ -663,7 +679,7 @@ public class WorldDesignerWindow : EditorWindow
             EditorUtility.SetDirty(_world);
             Repaint();
             SceneView.RepaintAll();
-            if (_livePreview) PreviewWorld();
+            if (_previewEnabled && _livePreview) PreviewWorld();
         }
     }
 
@@ -691,7 +707,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DuplicateSelectedPosts()
@@ -718,7 +734,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DeleteSelectedPosts()
@@ -732,7 +748,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void SnapSelectedPosts()
@@ -757,7 +773,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DuplicateSelectedPlanets()
@@ -788,7 +804,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DeleteSelectedPlanets()
@@ -802,7 +818,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void SnapSelectedPlanets()
@@ -830,7 +846,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void AlignSelectedPostsX()
@@ -845,7 +861,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.x = Mathf.Clamp(avg, -_world.halfExtents.x, _world.halfExtents.x);
             _world.authoredPosts[sel[k]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void AlignSelectedPostsY()
@@ -860,7 +876,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.y = Mathf.Clamp(avg, -_world.halfExtents.y, _world.halfExtents.y);
             _world.authoredPosts[sel[k]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DistributeSelectedPostsX()
@@ -879,7 +895,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.x = Mathf.Clamp(x, -_world.halfExtents.x, _world.halfExtents.x);
             _world.authoredPosts[sel[idx]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DistributeSelectedPostsY()
@@ -898,7 +914,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.y = Mathf.Clamp(y, -_world.halfExtents.y, _world.halfExtents.y);
             _world.authoredPosts[sel[idx]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void AlignSelectedPlanetsX()
@@ -915,7 +931,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.x = Mathf.Clamp(avg, -availX, availX);
             _world.authoredPlanets[sel[k]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void AlignSelectedPlanetsY()
@@ -932,7 +948,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.y = Mathf.Clamp(avg, -availY, availY);
             _world.authoredPlanets[sel[k]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DistributeSelectedPlanetsX()
@@ -953,7 +969,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.x = Mathf.Clamp(x, -availX, availX);
             _world.authoredPlanets[sel[idx]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DistributeSelectedPlanetsY()
@@ -974,7 +990,7 @@ public class WorldDesignerWindow : EditorWindow
             ap.position.y = Mathf.Clamp(y, -availY, availY);
             _world.authoredPlanets[sel[idx]] = ap;
         }
-        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_livePreview) PreviewWorld();
+        EditorUtility.SetDirty(_world); Repaint(); SceneView.RepaintAll(); if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void DrawPlanetsList()
@@ -1232,7 +1248,7 @@ public class WorldDesignerWindow : EditorWindow
                 SaveItemFoldoutsPlanets();
             }
             EditorUtility.SetDirty(_world);
-            if (_livePreview) PreviewWorld();
+            if (_previewEnabled && _livePreview) PreviewWorld();
         }
 
         if (removeAt >= 0)
@@ -1245,7 +1261,7 @@ public class WorldDesignerWindow : EditorWindow
                 SaveItemFoldoutsPlanets();
             }
             EditorUtility.SetDirty(_world);
-            if (_livePreview) PreviewWorld();
+            if (_previewEnabled && _livePreview) PreviewWorld();
         }
 
         if (EditorGUI.EndChangeCheck())
@@ -1254,7 +1270,7 @@ public class WorldDesignerWindow : EditorWindow
             EditorUtility.SetDirty(_world);
             Repaint();
             SceneView.RepaintAll();
-            if (_livePreview) PreviewWorld();
+            if (_previewEnabled && _livePreview) PreviewWorld();
         }
     }
 
@@ -1277,7 +1293,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void SortPlanetsByX()
@@ -1288,7 +1304,7 @@ public class WorldDesignerWindow : EditorWindow
         EditorUtility.SetDirty(_world);
         Repaint();
         SceneView.RepaintAll();
-        if (_livePreview) PreviewWorld();
+        if (_previewEnabled && _livePreview) PreviewWorld();
     }
 
     private void OnSceneGUI(SceneView sv)
@@ -1312,16 +1328,72 @@ public class WorldDesignerWindow : EditorWindow
         Handles.BeginGUI();
         {
             // Expand overlay to avoid clipping and accidental deselects
-            _overlayRect = new Rect(12, 12, 420, 220);
+            _overlayRect = new Rect(12, 12, 520, 300);
             GUILayout.BeginArea(_overlayRect, GUIContent.none, GUI.skin.box);
             GUILayout.Label("World Designer");
+            using (var svScope = new GUILayout.ScrollViewScope(_overlayScroll, GUILayout.Width(_overlayRect.width - 10), GUILayout.Height(_overlayRect.height - 28)))
+            {
+                _overlayScroll = svScope.scrollPosition;
+            // --- Preview ---
+            EditorGUILayout.LabelField("Preview", EditorStyles.boldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(!_world))
+                {
+                    bool prevPreview = _previewEnabled;
+                    _previewEnabled = GUILayout.Toggle(_previewEnabled, IconLabel("d_PlayButton", " Preview", "Toggle preview of the authored world"), GUILayout.Width(100));
+                    if (_previewEnabled != prevPreview)
+                    {
+                        EditorPrefs.SetBool(PrefPreviewEnabledKey, _previewEnabled);
+                        if (_previewEnabled) PreviewWorld(); else ClearPreview();
+                    }
+                    GUILayout.Space(10);
+                    bool prevLive = _livePreview;
+                    using (new EditorGUI.DisabledScope(!_previewEnabled))
+                    {
+                        _livePreview = GUILayout.Toggle(_livePreview, IconLabel("d_Refresh", " Live", "Auto-refresh preview on data change (requires Preview)"), GUILayout.Width(90));
+                    }
+                    if (_livePreview != prevLive)
+                    {
+                        EditorPrefs.SetBool(PrefLivePreviewKey, _livePreview);
+                        if (_previewEnabled && _livePreview) PreviewWorld();
+                    }
+                }
+            }
+            // Filters
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                bool prevPosts = _previewPosts;
+                bool prevPlanets = _previewPlanets;
+                bool prevIso = _previewIsolateSelection;
+                _previewPosts = GUILayout.Toggle(_previewPosts, IconLabel("d_Folder Icon", " Posts", "Include Posts in Preview"), GUILayout.Width(100));
+                _previewPlanets = GUILayout.Toggle(_previewPlanets, IconLabel("d_SceneViewFx", " Planets", "Include Planets in Preview"), GUILayout.Width(120));
+                _previewIsolateSelection = GUILayout.Toggle(_previewIsolateSelection, IconLabel("d_LockIcon", " Isolate", "Preview only selected rows"), GUILayout.Width(110));
+                if (_previewPosts != prevPosts)
+                {
+                    EditorPrefs.SetBool(PrefPreviewPostsKey, _previewPosts);
+                    if (_previewEnabled && _livePreview) PreviewWorld();
+                }
+                if (_previewPlanets != prevPlanets)
+                {
+                    EditorPrefs.SetBool(PrefPreviewPlanetsKey, _previewPlanets);
+                    if (_previewEnabled && _livePreview) PreviewWorld();
+                }
+                if (_previewIsolateSelection != prevIso)
+                {
+                    EditorPrefs.SetBool(PrefPreviewIsolateKey, _previewIsolateSelection);
+                    if (_previewEnabled && _livePreview) PreviewWorld();
+                }
+            }
+            GUILayout.Space(6);
+            // --- Snapping & Bounds ---
+            EditorGUILayout.LabelField("Snapping & Bounds", EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
                 bool prevSnap = _snapEnabled;
                 float prevSnapSize = _snapSize;
                 bool prevShowBounds = _showBounds;
-
-                _snapEnabled = GUILayout.Toggle(_snapEnabled, new GUIContent("Grid", "Toggle snap-to-grid and grid overlay"), GUILayout.Width(60));
+                _snapEnabled = GUILayout.Toggle(_snapEnabled, IconLabel("d_GridLayoutGroup Icon", " Grid", "Toggle snap-to-grid and grid overlay"), GUILayout.Width(120));
                 using (new EditorGUI.DisabledScope(!_snapEnabled))
                 {
                     GUILayout.Label("Size", GUILayout.Width(32));
@@ -1329,63 +1401,23 @@ public class WorldDesignerWindow : EditorWindow
                     if (float.TryParse(snapStr, out float parsed))
                         _snapSize = Mathf.Max(0.01f, parsed);
                 }
-                _showBounds = GUILayout.Toggle(_showBounds, new GUIContent("Bounds", "Toggle world bounds overlay"), GUILayout.Width(70));
-
+                _showBounds = GUILayout.Toggle(_showBounds, IconLabel("d_SceneViewOrtho", " Bounds", "Toggle world bounds overlay"), GUILayout.Width(120));
                 if (GUILayout.Button(new GUIContent("Frame", "Center and zoom the Scene view to fit the world bounds"), GUILayout.Width(64)))
                 {
                     FrameWorldBounds();
                 }
-
                 if (_snapEnabled != prevSnap) EditorPrefs.SetBool(PrefSnapEnabledKey, _snapEnabled);
                 if (!Mathf.Approximately(_snapSize, prevSnapSize)) EditorPrefs.SetFloat(PrefSnapSizeKey, Mathf.Max(0.01f, _snapSize));
                 if (_showBounds != prevShowBounds) EditorPrefs.SetBool(PrefShowBoundsKey, _showBounds);
             }
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                bool prevPosts = _previewPosts;
-                bool prevPlanets = _previewPlanets;
-                bool prevIso = _previewIsolateSelection;
-                _previewPosts = GUILayout.Toggle(_previewPosts, new GUIContent("Posts", "Include Posts in Preview"), GUILayout.Width(64));
-                _previewPlanets = GUILayout.Toggle(_previewPlanets, new GUIContent("Planets", "Include Planets in Preview"), GUILayout.Width(72));
-                _previewIsolateSelection = GUILayout.Toggle(_previewIsolateSelection, new GUIContent("Isolate", "Preview only selected rows"), GUILayout.Width(80));
-                if (_previewPosts != prevPosts)
-                {
-                    EditorPrefs.SetBool(PrefPreviewPostsKey, _previewPosts);
-                    if (_livePreview) PreviewWorld();
-                }
-                if (_previewPlanets != prevPlanets)
-                {
-                    EditorPrefs.SetBool(PrefPreviewPlanetsKey, _previewPlanets);
-                    if (_livePreview) PreviewWorld();
-                }
-                if (_previewIsolateSelection != prevIso)
-                {
-                    EditorPrefs.SetBool(PrefPreviewIsolateKey, _previewIsolateSelection);
-                    if (_livePreview) PreviewWorld();
-                }
-            }
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                using (new EditorGUI.DisabledScope(!_world))
-                {
-                    if (GUILayout.Button(new GUIContent("Preview", "Spawn a preview of the authored world"), GUILayout.Width(80)))
-                        PreviewWorld();
-                    if (GUILayout.Button(new GUIContent("Clear", "Remove the preview root from the scene"), GUILayout.Width(80)))
-                        ClearPreview();
-                    bool prevLive = _livePreview;
-                    _livePreview = GUILayout.Toggle(_livePreview, new GUIContent("Live", "Auto-refresh preview on data change"), GUILayout.Width(60));
-                    if (_livePreview != prevLive)
-                    {
-                        EditorPrefs.SetBool(PrefLivePreviewKey, _livePreview);
-                        if (_livePreview) PreviewWorld();
-                    }
-                }
-            }
+            GUILayout.Space(6);
+            // --- Alignment ---
+            EditorGUILayout.LabelField("Alignment", EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
                 bool prevAlign = _alignSnapEnabled;
                 float prevThresh = _alignSnapThreshold;
-                _alignSnapEnabled = GUILayout.Toggle(_alignSnapEnabled, new GUIContent("Align", "Enable alignment snapping to X/Y of nearby items"), GUILayout.Width(64));
+                _alignSnapEnabled = GUILayout.Toggle(_alignSnapEnabled, IconLabel("d_AlignVerticalCenter", " Align", "Enable alignment snapping to X/Y of nearby items"), GUILayout.Width(120));
                 GUILayout.Label("Thresh", GUILayout.Width(48));
                 string tStr = GUILayout.TextField(_alignSnapThreshold.ToString("0.###"), GUILayout.Width(52));
                 if (float.TryParse(tStr, out float tParsed))
@@ -1393,22 +1425,28 @@ public class WorldDesignerWindow : EditorWindow
                 if (_alignSnapEnabled != prevAlign) EditorPrefs.SetBool(PrefAlignEnabledKey, _alignSnapEnabled);
                 if (!Mathf.Approximately(_alignSnapThreshold, prevThresh)) EditorPrefs.SetFloat(PrefAlignThresholdKey, Mathf.Max(0.001f, _alignSnapThreshold));
             }
+            GUILayout.Space(6);
+            // --- Selection ---
+            EditorGUILayout.LabelField("Selection", EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
                 bool prevBox = _boxSelectEnabled;
                 bool prevBP = _boxSelectPlanets;
                 bool prevBL = _boxSelectPosts;
-                _boxSelectEnabled = GUILayout.Toggle(_boxSelectEnabled, new GUIContent("Box", "Enable box selection (Shift+Drag)"), GUILayout.Width(54));
-                _boxSelectPlanets = GUILayout.Toggle(_boxSelectPlanets, new GUIContent("Planets", "Include Planets in box select"), GUILayout.Width(72));
-                _boxSelectPosts = GUILayout.Toggle(_boxSelectPosts, new GUIContent("Posts", "Include Posts in box select"), GUILayout.Width(64));
+                _boxSelectEnabled = GUILayout.Toggle(_boxSelectEnabled, IconLabel("d_RectTool", " Box", "Enable box selection (Shift+Drag)"), GUILayout.Width(120));
+                _boxSelectPlanets = GUILayout.Toggle(_boxSelectPlanets, IconLabel("d_SceneViewFx", " Planets", "Include Planets in box select"), GUILayout.Width(120));
+                _boxSelectPosts = GUILayout.Toggle(_boxSelectPosts, IconLabel("d_Folder Icon", " Posts", "Include Posts in box select"), GUILayout.Width(100));
                 if (_boxSelectEnabled != prevBox) EditorPrefs.SetBool(PrefBoxEnabledKey, _boxSelectEnabled);
                 if (_boxSelectPlanets != prevBP) EditorPrefs.SetBool(PrefBoxPlanetsKey, _boxSelectPlanets);
                 if (_boxSelectPosts != prevBL) EditorPrefs.SetBool(PrefBoxPostsKey, _boxSelectPosts);
             }
+            GUILayout.Space(6);
+            // --- Info Bubbles ---
+            EditorGUILayout.LabelField("Info Bubbles", EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
                 bool prevMaster = _showInfo;
-                _showInfo = GUILayout.Toggle(_showInfo, new GUIContent("Info", "Toggle all info bubbles"), GUILayout.Width(56));
+                _showInfo = GUILayout.Toggle(_showInfo, IconLabel("d_console.infoicon", " Info", "Toggle all info bubbles"), GUILayout.Width(120));
                 if (_showInfo != prevMaster)
                 {
                     _showPlanetInfo = _showInfo;
@@ -1422,14 +1460,17 @@ public class WorldDesignerWindow : EditorWindow
             {
                 bool prevPI = _showPlanetInfo;
                 bool prevPoI = _showPostInfo;
-                _showPlanetInfo = GUILayout.Toggle(_showPlanetInfo, new GUIContent("Planet Info", "Show info bubbles above planets"), GUILayout.Width(100));
-                _showPostInfo = GUILayout.Toggle(_showPostInfo, new GUIContent("Post Info", "Show info bubbles above posts"), GUILayout.Width(90));
+                _showPlanetInfo = GUILayout.Toggle(_showPlanetInfo, IconLabel("d_SceneViewFx", " Planet Info", "Show info bubbles above planets"), GUILayout.Width(160));
+                _showPostInfo = GUILayout.Toggle(_showPostInfo, IconLabel("d_console.infoicon", " Post Info", "Show info bubbles above posts"), GUILayout.Width(160));
                 if (_showPlanetInfo != prevPI) EditorPrefs.SetBool(PrefShowPlanetInfoKey, _showPlanetInfo);
                 if (_showPostInfo != prevPoI) EditorPrefs.SetBool(PrefShowPostInfoKey, _showPostInfo);
                 // Keep master in sync: true only if both are true
                 _showInfo = _showPlanetInfo && _showPostInfo;
                 EditorPrefs.SetBool(PrefShowInfoKey, _showInfo);
             }
+            GUILayout.Space(6);
+            // --- Nudge ---
+            EditorGUILayout.LabelField("Nudge", EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.Label("Move", GUILayout.Width(36));
@@ -1446,6 +1487,7 @@ public class WorldDesignerWindow : EditorWindow
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.Label("Modifiers: Shift=Align • Alt=NoAlign • Ctrl/Cmd=Constrain Axis", EditorStyles.miniLabel);
+            }
             }
             GUILayout.EndArea();
         }
@@ -1641,7 +1683,7 @@ public class WorldDesignerWindow : EditorWindow
                     ap.position = clampedP;
                     _world.authoredPosts[i] = ap;
                     EditorUtility.SetDirty(_world);
-                    if (_livePreview) PreviewWorld();
+                    if (_previewEnabled && _livePreview) PreviewWorld();
                 }
 
                 // Info bubble
@@ -1649,10 +1691,16 @@ public class WorldDesignerWindow : EditorWindow
                 {
                     Handles.BeginGUI();
                     var guiPtP = HandleUtility.WorldToGUIPoint((Vector3)ap.position + new Vector3(0, 0.4f, 0));
-                    var rectP = new Rect(guiPtP.x - 80, guiPtP.y - 28, 160, 24);
+                    var rectP = new Rect(guiPtP.x - 80, guiPtP.y - 36, 160, 36);
                     GUI.Box(rectP, GUIContent.none);
                     GUILayout.BeginArea(rectP);
-                    GUILayout.Label($"{(string.IsNullOrEmpty(ap.displayName) ? "Post" : ap.displayName)}  L{Mathf.Max(1, ap.startLevel)}", EditorStyles.miniLabel);
+                    string postName = string.IsNullOrEmpty(ap.displayName) ? "Post" : ap.displayName;
+                    string matName = ap.initialRequestMaterial ? (string.IsNullOrEmpty(ap.initialRequestMaterial.materialName) ? "?" : ap.initialRequestMaterial.materialName) : "?";
+                    GUILayout.Label($"{postName}  L{Mathf.Max(1, ap.startLevel)}", EditorStyles.miniLabel);
+                    var prevCol = GUI.color;
+                    if (ap.initialRequestMaterial) GUI.color = ap.initialRequestMaterial.materialColor;
+                    GUILayout.Label($"Mat: {matName} (x{Mathf.Max(1, ap.initialRequestAmount)})", EditorStyles.miniLabel);
+                    GUI.color = prevCol;
                     GUILayout.EndArea();
                     Handles.EndGUI();
                 }
@@ -1792,7 +1840,7 @@ public class WorldDesignerWindow : EditorWindow
                 ap.position = clamped;
                 _world.authoredPlanets[i] = ap;
                 EditorUtility.SetDirty(_world);
-                if (_livePreview) PreviewWorld();
+                if (_previewEnabled && _livePreview) PreviewWorld();
             }
 
             // Info bubble
@@ -1803,7 +1851,14 @@ public class WorldDesignerWindow : EditorWindow
                 var rect = new Rect(guiPt.x - 80, guiPt.y - 36, 160, 32);
                 GUI.Box(rect, GUIContent.none);
                 GUILayout.BeginArea(rect);
-                GUILayout.Label($"{ap.size} / {ap.type}\nMass: {ap.mass}", EditorStyles.miniLabel);
+                // Header line tinted by type
+                var prevCol = GUI.color;
+                var typeCol = TypeColor(ap.type); typeCol.a = 1f;
+                GUI.color = typeCol;
+                GUILayout.Label($"{ap.size} / {ap.type}", EditorStyles.miniLabel);
+                GUI.color = prevCol;
+                // Secondary line
+                GUILayout.Label($"Mass: {ap.mass}", EditorStyles.miniLabel);
                 GUILayout.EndArea();
                 Handles.EndGUI();
             }
@@ -2236,7 +2291,7 @@ public class WorldDesignerWindow : EditorWindow
             EditorUtility.SetDirty(_world);
             Repaint();
             SceneView.RepaintAll();
-            if (_livePreview) PreviewWorld();
+            if (_previewEnabled && _livePreview) PreviewWorld();
         }
     }
 
