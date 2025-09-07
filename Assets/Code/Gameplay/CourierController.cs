@@ -25,14 +25,22 @@ public class CourierController : MonoBehaviour
     Rigidbody2D rb;
     LineRenderer lr;
     Camera cam;
+    TrailRenderer[] trailRenderers;
     float fuel;
     bool aiming;
     bool launched;
+
+    // World bounds via WorldBuilder (preferred) or PackageSpawner fallback
+    WorldBuilder worldBuilder;
 
     // Carrying
     [Header("Carry Package")]
     [SerializeField] Transform carriedPackage; // runtime
     public bool HasPackage => carriedPackage != null;
+
+    // Fired when this courier wraps across the world boundary.
+    // Delta is the translation applied to preserve continuity (newPos - oldPos).
+    public event System.Action<Vector2> OnWrapped;
 
     public int Fuel => Mathf.CeilToInt(fuel);
     public float FuelPercent => maxFuel <= 0f ? 0f : Mathf.Clamp01(fuel / maxFuel);
@@ -47,6 +55,13 @@ public class CourierController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         lr = GetComponent<LineRenderer>();
         cam = Camera.main;
+        trailRenderers = GetComponentsInChildren<TrailRenderer>(true);
+        // Find world bounds provider (WorldBuilder) if present
+#if UNITY_2023_1_OR_NEWER
+        worldBuilder = Object.FindFirstObjectByType<WorldBuilder>();
+#else
+        worldBuilder = Object.FindObjectOfType<WorldBuilder>();
+#endif
 
         fuel = maxFuel;
         rb.gravityScale = 0f;
@@ -137,6 +152,102 @@ public class CourierController : MonoBehaviour
             float ang = Mathf.Atan2(rb.linearVelocity.y, rb.linearVelocity.x) * Mathf.Rad2Deg;
             rb.MoveRotation(ang + facingOffsetDegrees);
         }
+
+        // Toroidal wrap across world bounds so travel continues seamlessly
+        WrapIfOutOfBounds();
+    }
+
+    void WrapIfOutOfBounds()
+    {
+        Vector2 p = rb.position;
+        Vector2 half = GetWorldHalfExtents();
+        float w = Mathf.Max(1e-3f, half.x * 2f);
+        float h = Mathf.Max(1e-3f, half.y * 2f);
+
+        bool wrapped = false;
+        if (p.x >  half.x) { p.x -= w; wrapped = true; }
+        else if (p.x < -half.x) { p.x += w; wrapped = true; }
+        if (p.y >  half.y) { p.y -= h; wrapped = true; }
+        else if (p.y < -half.y) { p.y += h; wrapped = true; }
+
+        if (wrapped)
+        {
+            Vector2 delta = p - rb.position;
+            rb.position = p; // teleport; preserve velocity and rotation
+            AdjustTrailsAfterWrap(delta);
+            // Notify listeners (e.g., camera) so they can shift with us
+            try { OnWrapped?.Invoke(delta); } catch { }
+        }
+    }
+
+    void AdjustTrailsAfterWrap(Vector2 delta)
+    {
+        if (trailRenderers == null || trailRenderers.Length == 0) return;
+        for (int i = 0; i < trailRenderers.Length; i++)
+        {
+            var tr = trailRenderers[i];
+            if (!tr) continue;
+
+            // Try to shift existing trail points via reflection API (if available in this Unity version)
+            try
+            {
+                var getM = typeof(TrailRenderer).GetMethod("GetPositions", new System.Type[] { typeof(Vector3[]) });
+                var setM = typeof(TrailRenderer).GetMethod("SetPositions", new System.Type[] { typeof(Vector3[]) });
+                if (getM != null && setM != null)
+                {
+                    int cap = 512; // reasonable upper bound to avoid allocations explosion
+                    var tmp = new Vector3[cap];
+                    object[] args = new object[] { tmp };
+                    int count = (int)getM.Invoke(tr, args);
+                    if (count > 0)
+                    {
+                        var arr = (Vector3[])args[0];
+                        for (int j = 0; j < count && j < arr.Length; j++)
+                        {
+                            arr[j].x += delta.x;
+                            arr[j].y += delta.y;
+                        }
+                        // Trim to 'count'
+                        if (count != arr.Length)
+                        {
+                            var sliced = new Vector3[count];
+                            System.Array.Copy(arr, sliced, count);
+                            setM.Invoke(tr, new object[] { sliced });
+                        }
+                        else
+                        {
+                            setM.Invoke(tr, new object[] { arr });
+                        }
+                        continue;
+                    }
+                }
+            }
+            catch { /* fallback below */ }
+
+            // Fallback: clear the trail to avoid long line across the wrap
+            tr.Clear();
+        }
+    }
+
+    Vector2 GetWorldHalfExtents()
+    {
+        if (!worldBuilder)
+        {
+#if UNITY_2023_1_OR_NEWER
+            worldBuilder = Object.FindFirstObjectByType<WorldBuilder>();
+#else
+            worldBuilder = Object.FindObjectOfType<WorldBuilder>();
+#endif
+        }
+        if (worldBuilder) return worldBuilder.WorldHalfExtents;
+
+        // Fallback: try to infer from package spawner area if available
+        var spawner = FindObjectOfType<PackageSpawner>();
+        if (spawner)
+        {
+            return new Vector2(Mathf.Max(1f, spawner.areaSize.x * 0.5f), Mathf.Max(1f, spawner.areaSize.y * 0.5f));
+        }
+        return new Vector2(60f, 60f);
     }
 
     void DrawPrediction(Vector2 startPos, Vector2 startVel)

@@ -287,7 +287,6 @@ public class MinimapHUD : MonoBehaviour
         Vector2 center; Vector2 sizeWU;
         if (preferWorldDefinitionBounds && worldBuilder)
         {
-            // WorldDefinition is centered at (0,0); fit entire world rectangle
             Vector2 halfExt = worldBuilder.WorldHalfExtents;
             center = Vector2.zero;
             sizeWU = new Vector2(Mathf.Max(1f, halfExt.x * 2f), Mathf.Max(1f, halfExt.y * 2f));
@@ -313,7 +312,7 @@ public class MinimapHUD : MonoBehaviour
             else
             {
                 center = b.center;
-                sizeWU = new Vector2(Mathf.Max(8f, b.size.x + 4f), Mathf.Max(6f, b.size.y + 3f)); // add padding
+                sizeWU = new Vector2(Mathf.Max(8f, b.size.x + 4f), Mathf.Max(6f, b.size.y + 3f));
             }
         }
 
