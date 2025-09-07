@@ -9,6 +9,9 @@ public class WorldBuilder : MonoBehaviour
     public IReadOnlyList<DeliveryNode> Posts => _posts;
     public IReadOnlyList<Planet> Planets => _planets;
 
+    // Public exposure of world bounds so other systems (e.g., Minimap) can map the whole world.
+    public Vector2 WorldHalfExtents => definition ? definition.halfExtents : new Vector2(60f, 60f);
+
     private readonly List<DeliveryNode> _posts = new();
     private readonly List<Planet> _planets = new();
 

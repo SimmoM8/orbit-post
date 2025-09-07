@@ -48,15 +48,23 @@ public class MinimapHUD : MonoBehaviour
     [Tooltip("How often (seconds) to rescan scene for new/removed objects.")]
     public float rescanInterval = 0.5f;
 
+    [Header("World Bounds Source")]
+    [Tooltip("If true and a WorldBuilder is present, map the minimap to the world's full bounds (WorldDefinition.halfExtents). Overrides spawner area.")]
+    public bool preferWorldDefinitionBounds = true;
+
     // Runtime references
     CourierController courier;
     PackageSpawner spawner;
+    WorldBuilder worldBuilder;
 
     // Simple white sprite for drawing rectangles/circles
     static Sprite s_WhiteSprite;
 
     Image frameBg;
     RectTransform panel;
+
+    // Mapping scale cache (pixels per world unit)
+    float _pxPerWorldX = 0f, _pxPerWorldY = 0f, _pxPerWorldMin = 0f;
 
     abstract class Tracked
     {
@@ -89,8 +97,10 @@ public class MinimapHUD : MonoBehaviour
         public override void UpdateStyle()
         {
             if (!img || planet == null) return;
-            // Size proportional to radius, clamped
-            float d = Mathf.Clamp(planet.radius * 2f, mm.planetMinSize, mm.planetMaxSize);
+            // Size proportional to world radius, mapped to pixels using current minimap scale
+            float pxPerWU = Mathf.Max(0.0001f, mm.PixelsPerWorldUnit);
+            float dPx = planet.radius * 2f * pxPerWU;
+            float d = Mathf.Clamp(dPx, mm.planetMinSize, mm.planetMaxSize);
             var rt = img.rectTransform; rt.sizeDelta = new Vector2(d, d);
             // Color: try sprite color if available; fallback
             var sr = planet.spriteRef ? planet.spriteRef : planet.GetComponentInChildren<SpriteRenderer>();
@@ -165,9 +175,11 @@ public class MinimapHUD : MonoBehaviour
 #if UNITY_2023_1_OR_NEWER
         courier = Object.FindFirstObjectByType<CourierController>();
         spawner = Object.FindFirstObjectByType<PackageSpawner>();
+        worldBuilder = Object.FindFirstObjectByType<WorldBuilder>();
 #else
         courier = Object.FindObjectOfType<CourierController>();
         spawner = Object.FindObjectOfType<PackageSpawner>();
+        worldBuilder = Object.FindObjectOfType<WorldBuilder>();
 #endif
     }
 
@@ -180,8 +192,10 @@ public class MinimapHUD : MonoBehaviour
             rescanTimer = Mathf.Max(0.05f, rescanInterval);
         }
 
+        // Compute mapping first so planet sizes can use accurate pixels-per-world scaling, then styles, then positions
+        UpdateAllPositions(computeOnly:true);
         UpdateAllStyles();
-        UpdateAllPositions();
+        UpdateAllPositions(computeOnly:false);
     }
 
     void Rescan()
@@ -267,11 +281,18 @@ public class MinimapHUD : MonoBehaviour
         for (int i = 0; i < tracked.Count; i++) tracked[i].UpdateStyle();
     }
 
-    void UpdateAllPositions()
+    void UpdateAllPositions(bool computeOnly = false)
     {
         // Compute mapping bounds
         Vector2 center; Vector2 sizeWU;
-        if (spawner)
+        if (preferWorldDefinitionBounds && worldBuilder)
+        {
+            // WorldDefinition is centered at (0,0); fit entire world rectangle
+            Vector2 halfExt = worldBuilder.WorldHalfExtents;
+            center = Vector2.zero;
+            sizeWU = new Vector2(Mathf.Max(1f, halfExt.x * 2f), Mathf.Max(1f, halfExt.y * 2f));
+        }
+        else if (spawner)
         {
             center = spawner.areaCenter;
             sizeWU = spawner.areaSize;
@@ -300,6 +321,12 @@ public class MinimapHUD : MonoBehaviour
         Vector2 half = Vector2.Max(sizeWU * 0.5f, new Vector2(1f, 1f));
         var rect = container.rect;
         Vector2 sz = rect.size - new Vector2(framePadding * 2f, framePadding * 2f);
+
+        // Cache pixels-per-world mapping for size calculations (isotropic by min)
+        _pxPerWorldX = sz.x / Mathf.Max(1e-4f, sizeWU.x);
+        _pxPerWorldY = sz.y / Mathf.Max(1e-4f, sizeWU.y);
+        _pxPerWorldMin = Mathf.Min(_pxPerWorldX, _pxPerWorldY);
+        if (computeOnly) return;
 
         for (int i = 0; i < tracked.Count; i++)
         {
@@ -366,10 +393,7 @@ public class MinimapHUD : MonoBehaviour
     {
         var img = CreateImage(name, parent, Color.white);
         if (makeCircle)
-        {
-            // Use a simple mask by rounding via material if available; fallback keeps it square.
-            // To keep this self-contained, we stay with square but size suggests circular planet.
-        }
+            img.sprite = EnsureCircleSprite();
         // Positioning inside panel (top-left anchored)
         var rt = img.rectTransform;
         rt.anchorMin = new Vector2(0, 0);
@@ -387,4 +411,37 @@ public class MinimapHUD : MonoBehaviour
         tex.Apply();
         s_WhiteSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
     }
+
+    // Cached soft-edged circle sprite for planets
+    static Sprite s_CircleSprite;
+    static Sprite EnsureCircleSprite(int size = 64)
+    {
+        if (s_CircleSprite != null) return s_CircleSprite;
+        int s = Mathf.Max(8, size);
+        var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        var cols = new Color32[s * s];
+        float cx = (s - 1) * 0.5f;
+        float cy = (s - 1) * 0.5f;
+        float r = Mathf.Min(cx, cy);
+        float edge = Mathf.Max(1f, s * 0.04f); // ~4% soft edge
+        for (int y = 0; y < s; y++)
+        {
+            for (int x = 0; x < s; x++)
+            {
+                float dx = x - cx;
+                float dy = y - cy;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                float a = Mathf.Clamp01((r - dist) / edge); // 1 inside, 0 outside with soft edge
+                cols[y * s + x] = new Color(1f, 1f, 1f, a);
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        s_CircleSprite = Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), s);
+        return s_CircleSprite;
+    }
+
+    // Expose isotropic pixels-per-world-unit for planet sizing
+    public float PixelsPerWorldUnit => _pxPerWorldMin;
 }

@@ -524,21 +524,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   container: {fileID: 0}
   anchoredPos: {x: 20, y: 20}
-  size: {x: 250, y: 250}
+  size: {x: 350, y: 350}
   corner: 2
-  frameColor: {r: 0, g: 0, b: 0, a: 0.45}
+  frameColor: {r: 0.9245283, g: 0.23065268, b: 0.12646852, a: 0.45}
   backgroundColor: {r: 1, g: 1, b: 1, a: 0.06}
-  framePadding: 6
-  courierSize: 10
+  framePadding: 10
+  courierSize: 8
   packageSize: 6
   nodeSize: 8
   planetMinSize: 8
-  planetMaxSize: 24
-  courierColor: {r: 1, g: 1, b: 1, a: 1}
+  planetMaxSize: 50
+  courierColor: {r: 1, g: 0, b: 0, a: 1}
   packageColorDefault: {r: 0.9, g: 0.9, b: 0.9, a: 1}
   nodeColor: {r: 1, g: 0.95, b: 0.35, a: 1}
   planetColorDefault: {r: 0.7, g: 0.85, b: 1, a: 1}
   rescanInterval: 0.5
+  preferWorldDefinitionBounds: 1
 --- !u!1 &461791419
 GameObject:
   m_ObjectHideFlags: 0
