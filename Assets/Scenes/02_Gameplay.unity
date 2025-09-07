@@ -389,6 +389,7 @@ GameObject:
   - component: {fileID: 366240078}
   - component: {fileID: 366240077}
   - component: {fileID: 366240076}
+  - component: {fileID: 366240081}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -509,6 +510,35 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
+--- !u!114 &366240081
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 366240075}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 643f368abbbb34f00b0c3c420197f823, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  container: {fileID: 0}
+  anchoredPos: {x: 20, y: 20}
+  size: {x: 250, y: 250}
+  corner: 2
+  frameColor: {r: 0, g: 0, b: 0, a: 0.45}
+  backgroundColor: {r: 1, g: 1, b: 1, a: 0.06}
+  framePadding: 6
+  courierSize: 10
+  packageSize: 6
+  nodeSize: 8
+  planetMinSize: 8
+  planetMaxSize: 24
+  courierColor: {r: 1, g: 1, b: 1, a: 1}
+  packageColorDefault: {r: 0.9, g: 0.9, b: 0.9, a: 1}
+  nodeColor: {r: 1, g: 0.95, b: 0.35, a: 1}
+  planetColorDefault: {r: 0.7, g: 0.85, b: 1, a: 1}
+  rescanInterval: 0.5
 --- !u!1 &461791419
 GameObject:
   m_ObjectHideFlags: 0
