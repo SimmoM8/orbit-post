@@ -285,16 +285,10 @@ public class MinimapHUD : MonoBehaviour
     {
         // Compute mapping bounds
         Vector2 center; Vector2 sizeWU;
-        if (preferWorldDefinitionBounds && worldBuilder)
+        if (WorldBounds.TryGet(out var c, out var half))
         {
-            Vector2 halfExt = worldBuilder.WorldHalfExtents;
-            center = Vector2.zero;
-            sizeWU = new Vector2(Mathf.Max(1f, halfExt.x * 2f), Mathf.Max(1f, halfExt.y * 2f));
-        }
-        else if (spawner)
-        {
-            center = spawner.areaCenter;
-            sizeWU = spawner.areaSize;
+            center = c;
+            sizeWU = new Vector2(Mathf.Max(1f, half.x * 2f), Mathf.Max(1f, half.y * 2f));
         }
         else
         {
@@ -317,7 +311,7 @@ public class MinimapHUD : MonoBehaviour
         }
 
         // Avoid division by zero
-        Vector2 half = Vector2.Max(sizeWU * 0.5f, new Vector2(1f, 1f));
+        Vector2 halfWU = Vector2.Max(sizeWU * 0.5f, new Vector2(1f, 1f));
         var rect = container.rect;
         Vector2 sz = rect.size - new Vector2(framePadding * 2f, framePadding * 2f);
 
@@ -335,8 +329,8 @@ public class MinimapHUD : MonoBehaviour
             Vector2 wp = t.WorldPos;
             // Normalize to [-1..+1] relative to center
             Vector2 n = new Vector2(
-                Mathf.Clamp((wp.x - center.x) / half.x, -1f, 1f),
-                Mathf.Clamp((wp.y - center.y) / half.y, -1f, 1f)
+                Mathf.Clamp((wp.x - center.x) / halfWU.x, -1f, 1f),
+                Mathf.Clamp((wp.y - center.y) / halfWU.y, -1f, 1f)
             );
 
             // Map to panel local (0..1) then to anchored pixels inside padding

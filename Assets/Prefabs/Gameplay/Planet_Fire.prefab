@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 2786575441107877177}
   - component: {fileID: 2627358360822507525}
   - component: {fileID: 4257266125941120146}
+  - component: {fileID: -1363784169787996662}
   - component: {fileID: 6476800375659255513}
   - component: {fileID: 6163092613778559162}
   m_Layer: 0
@@ -92,8 +93,34 @@ MonoBehaviour:
   overrideMass: 0
   enforceUniformScale: 1
   spriteRef: {fileID: 0}
+  useDebugColor: 0
+  debugColorFromProfile: 1
+  typeColorDefault: {r: 1, g: 1, b: 1, a: 1}
+  typeColorFire: {r: 1, g: 0.45, b: 0.15, a: 1}
+  typeColorWater: {r: 0.2, g: 0.6, b: 1, a: 1}
+  typeColorEarth: {r: 0.4, g: 0.8, b: 0.4, a: 1}
   planetType: 0
   dominantMaterial: 
+--- !u!114 &-1363784169787996662
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3747974145327513167}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 28220c71b6da64540bc50bebd329aca9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  source: {fileID: 0}
+  autoDetectBounds: 1
+  preferSpawner: 0
+  worldCenter: {x: 0, y: 0}
+  worldSize: {x: 60, y: 60}
+  edgeThreshold: 20
+  debugDrawBounds: 1
+  debugLogBounds: 1
 --- !u!212 &6476800375659255513
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -101,7 +128,7 @@ SpriteRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3747974145327513167}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 0
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1
@@ -156,7 +183,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3747974145327513167}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0e043f66b546c4a1f82fd84f8cca0b15, type: 3}
   m_Name: 

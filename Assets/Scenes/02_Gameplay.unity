@@ -290,6 +290,7 @@ MonoBehaviour:
   G: 2.6
   maxAccel: 25
   gravityScale: 1
+  wrapGravity: 1
 --- !u!4 &298109504
 Transform:
   m_ObjectHideFlags: 0

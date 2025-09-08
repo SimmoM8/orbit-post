@@ -33,9 +33,6 @@ public class GravityField : MonoBehaviour
     private const float FALLBACK_GRAVITY_SCALE = 1f;
 
     private static GravityField _instance;
-    // Cached providers for world bounds
-    private static WorldBuilder _wb;
-    private static PackageSpawner _sp;
     void Awake()
     {
         _instance = this;
@@ -49,37 +46,7 @@ public class GravityField : MonoBehaviour
         }
     }
 
-    static bool TryGetWorldBounds(out Vector2 center, out Vector2 half)
-    {
-#if UNITY_2023_1_OR_NEWER
-        if (_wb == null) _wb = Object.FindFirstObjectByType<WorldBuilder>();
-        if (_wb)
-        {
-            center = Vector2.zero;
-            half = _wb.WorldHalfExtents;
-            return true;
-        }
-        if (_sp == null) _sp = Object.FindFirstObjectByType<PackageSpawner>();
-#else
-        if (_wb == null) _wb = Object.FindObjectOfType<WorldBuilder>();
-        if (_wb)
-        {
-            center = Vector2.zero;
-            half = _wb.WorldHalfExtents;
-            return true;
-        }
-        if (_sp == null) _sp = Object.FindObjectOfType<PackageSpawner>();
-#endif
-        if (_sp)
-        {
-            center = _sp.areaCenter;
-            half = new Vector2(Mathf.Max(1f, _sp.areaSize.x * 0.5f), Mathf.Max(1f, _sp.areaSize.y * 0.5f));
-            return true;
-        }
-        center = Vector2.zero;
-        half = new Vector2(60f, 60f);
-        return false;
-    }
+    // Removed local bounds finder; using WorldBounds.TryGet (Utilities/WorldBounds.cs)
 
     public static void Register(IGravityBody body)
     {
@@ -112,7 +79,7 @@ public class GravityField : MonoBehaviour
         float w = 0f, h = 0f;
         if (useWrap)
         {
-            TryGetWorldBounds(out center, out half);
+            WorldBounds.TryGet(out center, out half);
             w = Mathf.Max(1e-4f, half.x * 2f);
             h = Mathf.Max(1e-4f, half.y * 2f);
         }

@@ -47,12 +47,12 @@ MonoBehaviour:
     type: 2
     profile: {fileID: 0}
     mass: 20
-  - position: {x: 30.5, y: -33.5}
+  - position: {x: 56, y: -50.5}
     size: 1
     type: 2
     profile: {fileID: 0}
     mass: 10000
-  - position: {x: -35, y: -33.5}
+  - position: {x: -55, y: -50}
     size: 0
     type: 1
     profile: {fileID: 0}

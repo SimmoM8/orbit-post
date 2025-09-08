@@ -160,15 +160,17 @@ public class CourierController : MonoBehaviour
     void WrapIfOutOfBounds()
     {
         Vector2 p = rb.position;
-        Vector2 half = GetWorldHalfExtents();
+        WorldBounds.TryGet(out var center, out var half);
         float w = Mathf.Max(1e-3f, half.x * 2f);
         float h = Mathf.Max(1e-3f, half.y * 2f);
 
         bool wrapped = false;
-        if (p.x >  half.x) { p.x -= w; wrapped = true; }
-        else if (p.x < -half.x) { p.x += w; wrapped = true; }
-        if (p.y >  half.y) { p.y -= h; wrapped = true; }
-        else if (p.y < -half.y) { p.y += h; wrapped = true; }
+        Vector2 local = p - center;
+        if (local.x >  half.x) { local.x -= w; wrapped = true; }
+        else if (local.x < -half.x) { local.x += w; wrapped = true; }
+        if (local.y >  half.y) { local.y -= h; wrapped = true; }
+        else if (local.y < -half.y) { local.y += h; wrapped = true; }
+        p = local + center;
 
         if (wrapped)
         {
@@ -229,26 +231,7 @@ public class CourierController : MonoBehaviour
         }
     }
 
-    Vector2 GetWorldHalfExtents()
-    {
-        if (!worldBuilder)
-        {
-#if UNITY_2023_1_OR_NEWER
-            worldBuilder = Object.FindFirstObjectByType<WorldBuilder>();
-#else
-            worldBuilder = Object.FindObjectOfType<WorldBuilder>();
-#endif
-        }
-        if (worldBuilder) return worldBuilder.WorldHalfExtents;
-
-        // Fallback: try to infer from package spawner area if available
-        var spawner = FindObjectOfType<PackageSpawner>();
-        if (spawner)
-        {
-            return new Vector2(Mathf.Max(1f, spawner.areaSize.x * 0.5f), Mathf.Max(1f, spawner.areaSize.y * 0.5f));
-        }
-        return new Vector2(60f, 60f);
-    }
+    // Removed legacy bounds helper; using WorldBounds.TryGet instead.
 
     void DrawPrediction(Vector2 startPos, Vector2 startVel)
     {
