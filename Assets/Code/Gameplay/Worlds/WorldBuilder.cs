@@ -25,6 +25,12 @@ public class WorldBuilder : MonoBehaviour
 
     void Start()
     {
+        // Allow menu selection to override serialized assignment
+        if (WorldSelection.HasSelection)
+        {
+            definition = WorldSelection.Selected;
+        }
+
         if (!definition) { Debug.LogError("WorldDefinition missing"); return; }
         BuildWorld();
     }
