@@ -1,10 +1,19 @@
 fileFormatVersion: 2
-guid: 32d952fb8d4f1450c87ecc70d045d7b5
+guid: 1f72412b65a2444c88095f6693e2c76b
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -7731828219760251039
-    second: Menu Draft_0
+      213: -7378461268542738481
+    second: Stars_BG_0
+  - first:
+      213: 6154763393796520438
+    second: Stars_BG_1
+  - first:
+      213: 7342308478515202271
+    second: Stars_BG_2
+  - first:
+      213: 3536852629448369786
+    second: Stars_BG_3
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -40,15 +49,15 @@ TextureImporter:
     filterMode: 1
     aniso: 1
     mipBias: 0
-    wrapU: 1
-    wrapV: 1
-    wrapW: 1
+    wrapU: 0
+    wrapV: 0
+    wrapW: 0
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 2
+  spriteMode: 1
   spriteExtrude: 1
-  spriteMeshType: 1
+  spriteMeshType: 0
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 100
@@ -139,13 +148,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Menu Draft_0
+      name: Stars_BG_0
       rect:
         serializedVersion: 2
-        x: 0
+        x: 3
         y: 0
-        width: 1080
-        height: 1920
+        width: 1500
+        height: 1996
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -154,8 +163,74 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 16f69d8f23703b490800000000000000
-      internalID: -7731828219760251039
+      spriteID: fcf288ba1907a9990800000000000000
+      internalID: -7378461268542738481
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Stars_BG_1
+      rect:
+        serializedVersion: 2
+        x: 188
+        y: 906
+        width: 6
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6f9b1d382bc1a6550800000000000000
+      internalID: 6154763393796520438
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Stars_BG_2
+      rect:
+        serializedVersion: 2
+        x: 190
+        y: 41
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fd8cc35f8ae15e560800000000000000
+      internalID: 7342308478515202271
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Stars_BG_3
+      rect:
+        serializedVersion: 2
+        x: 1424
+        y: 0
+        width: 575
+        height: 1992
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a762d293abc651130800000000000000
+      internalID: 3536852629448369786
       vertices: []
       indices: 
       edges: []
@@ -164,7 +239,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 5e97eb03825dee720800000000000000
     internalID: 0
     vertices: []
     indices: 
@@ -174,7 +249,10 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Menu Draft_0: -7731828219760251039
+      Stars_BG_0: -7378461268542738481
+      Stars_BG_1: 6154763393796520438
+      Stars_BG_2: 7342308478515202271
+      Stars_BG_3: 3536852629448369786
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

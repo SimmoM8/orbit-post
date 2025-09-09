@@ -1328,7 +1328,7 @@ public class WorldDesignerWindow : EditorWindow
         Handles.BeginGUI();
         {
             // Expand overlay to avoid clipping and accidental deselects
-            _overlayRect = new Rect(12, 12, 520, 300);
+            _overlayRect = new Rect(12, 12, 300, 100);
             GUILayout.BeginArea(_overlayRect, GUIContent.none, GUI.skin.box);
             GUILayout.Label("World Designer");
             using (var svScope = new GUILayout.ScrollViewScope(_overlayScroll, GUILayout.Width(_overlayRect.width - 10), GUILayout.Height(_overlayRect.height - 28)))
