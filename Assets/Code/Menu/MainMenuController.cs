@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 /// <summary>
 /// Controls the launch menu flow: Home, Worlds, Settings, Highscores (stub).
@@ -106,9 +107,15 @@ public class MainMenuController : MonoBehaviour
             var go = Instantiate(worldListItemPrefab, worldListContainer);
             go.name = $"WorldItem_{world.displayName}";
 
-            // Try to set label if present
+            // Try to set label on either legacy Text or TMP
+            string label = string.IsNullOrEmpty(world.displayName) ? world.name : world.displayName;
             var txt = go.GetComponentInChildren<Text>();
-            if (txt) txt.text = string.IsNullOrEmpty(world.displayName) ? world.name : world.displayName;
+            if (txt) txt.text = label;
+            else
+            {
+                var tmp = go.GetComponentInChildren<TMP_Text>();
+                if (tmp) tmp.text = label;
+            }
 
             // Hook up button
             var btn = go.GetComponent<Button>();
@@ -129,4 +136,3 @@ public class MainMenuController : MonoBehaviour
         WorldSelection.StartGame();
     }
 }
-
